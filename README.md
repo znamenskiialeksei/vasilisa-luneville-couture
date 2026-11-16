@@ -46,8 +46,8 @@ vasilisa-luneville-couture-platform/
 
 ## 📦 Развертывание на Vercel
 
-Пользовательский репозиторий: `https://github.com/znamenskiialeksei/Sitesi`  
-Деплой на Vercel: `https://vercel.com/znamenskiialekseis-projects/sitesi`  
+Пользовательский репозиторий: `https://github.com/znamenskiialeksei/vasilisa-luneville-couture`  
+Деплой на Vercel: `https://vercel.com/znamenskiialekseis-projects/vasilisa-luneville-couture`  
 Боевой URL ветки `v1-airbnb`: `https://sitesi-git-v1-airbnb-znamenskiialekseis-projects.vercel.app`
 
 Для обновления продакшн-сайта запустите задачу VS Code **«📤 20. Выгрузка в GitHub Ветка v1-airbnb»** (`push_project_to_github.ps1 -Target v1`), которая автоматически формирует чистое дерево `vasilisa-luneville-couture-platform` в корень ветки `v1-airbnb`, либо переключите корневую директорию (Root Directory) в настройках Vercel на `vasilisa-luneville-couture-platform`.
