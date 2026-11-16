@@ -11,11 +11,17 @@
 // 100% Zero-Brackets & Zero-Emdash Стандарт.
 // ==============================================================================
 
-require('dotenv').config({ path: '.env.local' });
 const fs = require('fs');
 const path = require('path');
-const { google } = require('googleapis');
-const { SHEETS_REGISTRY, getLiveSheetMap, resolveRange } = require('../utils/sheetsRegistry');
+const {
+  SHEETS_REGISTRY,
+  loadLocalEnvFile,
+  resolveCrmSpreadsheetId,
+  createUniversalSheetsClient,
+  getLiveSheetMap,
+  resolveRange
+} = require('../utils/sheetsRegistry');
+loadLocalEnvFile();
 
 // Регулярное выражение для выявления формульных ошибок Google Таблиц
 const FORMULA_ERROR_REGEX = /#(REF!|VALUE!|ERROR!|N\/A|NAME\?|NUM!|DIV\/0!)/i;
@@ -51,15 +57,11 @@ function getSheetsClient() {
     throw new Error('Отсутствуют учетные данные GOOGLE_CLIENT_EMAIL или GOOGLE_PRIVATE_KEY в .env.local');
   }
 
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: email,
-      private_key: parsePrivateKey(privateKey)
-    },
+  return createUniversalSheetsClient({
+    clientEmail: email,
+    privateKey: parsePrivateKey(privateKey),
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
   });
-
-  return google.sheets({ version: 'v4', auth });
 }
 
 /**
@@ -68,7 +70,7 @@ function getSheetsClient() {
 async function saveMasterSeed() {
   console.log('[save-master-seed] Инициализация процесса фиксации эталона SSOT...');
 
-  const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+  const spreadsheetId = resolveCrmSpreadsheetId();
   if (!spreadsheetId) {
     throw new Error('Не указан GOOGLE_SPREADSHEET_ID в .env.local');
   }

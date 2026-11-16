@@ -19,7 +19,7 @@ export default async function handler(req, res) {
       !clientEmail ||
       clientEmail.includes('your-service-account-email') ||
       rawKey.includes('YOUR_PRIVATE_KEY') ||
-      process.env.GOOGLE_SPREADSHEET_ID === 'your_google_sheet_id'
+      ((process.env.GOOGLE_SPREADSHEET_ID && !['1LQ1B-e3yzt587C2-fIo_ztAJnQainc5zh8n6i0O2g_s','10kAzhvlGVxkmS_RSIjmSz5m3Vjb9Wv58wb_o856WaCQ','14TuuImqc-RfBqHDiwPn-czVH87C9Q1fH','your_google_sheet_id'].includes(process.env.GOOGLE_SPREADSHEET_ID.trim())) ? process.env.GOOGLE_SPREADSHEET_ID.trim() : '1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4') === 'your_google_sheet_id'
     ) {
       res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
       return res.status(200).send('BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Vasilisa.luneville - вышивка от кутюр//Haute Couture Platform//RU\nEND:VCALENDAR');
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     });
 
     const sheets = google.sheets({ version: 'v4', auth });
-    const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+    const spreadsheetId = ((process.env.GOOGLE_SPREADSHEET_ID && !['1LQ1B-e3yzt587C2-fIo_ztAJnQainc5zh8n6i0O2g_s','10kAzhvlGVxkmS_RSIjmSz5m3Vjb9Wv58wb_o856WaCQ','14TuuImqc-RfBqHDiwPn-czVH87C9Q1fH','your_google_sheet_id'].includes(process.env.GOOGLE_SPREADSHEET_ID.trim())) ? process.env.GOOGLE_SPREADSHEET_ID.trim() : '1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4');
 
     // Динамический резолвер актуальных названий листов
     const sheetMap = await getLiveSheetMap(sheets, spreadsheetId);

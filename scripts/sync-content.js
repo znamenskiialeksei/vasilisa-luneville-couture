@@ -8,11 +8,16 @@
 // 100% Zero-Brackets & Zero-Emdash Стандарт.
 // ==============================================================================
 
-require('dotenv').config({ path: '.env.local' });
-const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
-const { getLiveSheetMap, resolveRange } = require('../utils/sheetsRegistry');
+const {
+  loadLocalEnvFile,
+  resolveCrmSpreadsheetId,
+  createUniversalSheetsClient,
+  getLiveSheetMap,
+  resolveRange
+} = require('../utils/sheetsRegistry');
+loadLocalEnvFile();
 const { MASTER_ABOUT_SECTIONS, MASTER_HOME_MAP, buildHomeDerivedCollections } = require('../utils/masterSeedContent');
 const { syncTranslationsWithMaster } = require('../utils/syncTranslationsWithMaster');
 
@@ -26,7 +31,7 @@ const sanitizeText = (val, fallback = '') => {
   return s;
 };
 
-const GOOGLE_SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
+const GOOGLE_SPREADSHEET_ID = resolveCrmSpreadsheetId();
 const contentFilePath = path.join(__dirname, '../utils/content.json');
 
 const emptyContent = JSON.stringify(
@@ -77,15 +82,11 @@ async function syncContent() {
   }
 
   try {
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: clientEmail,
-        private_key: parsedKey
-      },
+    const sheets = createUniversalSheetsClient({
+      clientEmail,
+      privateKey: parsedKey,
       scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
     });
-
-    const sheets = google.sheets({ version: 'v4', auth });
 
     // Динамический резолвер структуры листов по sheetId и алиасам
     const sheetMap = await getLiveSheetMap(sheets, spreadsheetId);

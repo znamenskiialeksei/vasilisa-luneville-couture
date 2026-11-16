@@ -12,6 +12,233 @@
 // Уровень Б: Адаптация реестра 15 канонических листов CRM [101..115] под школу вышивки, наставничество, арт-отпуска и бутик Vasilisa.luneville.
 // ==============================================================================
 
+
+const CANONICAL_CRM_SPREADSHEET_ID = '1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4';
+const CANONICAL_CHATS_SPREADSHEET_ID = '1auLYHrJQW-OnhUVJ3iLcXUoTY4b2Phg8MXbIEt2kHgE';
+const CANONICAL_DRIVE_DB_FOLDER_ID = '1DWd60F6n1i1mYdceLZx8RwHjVDGypz_d';
+
+const LEGACY_BLOCKED_IDS = new Set([
+  '1LQ1B-e3yzt587C2-fIo_ztAJnQainc5zh8n6i0O2g_s',
+  '10kAzhvlGVxkmS_RSIjmSz5m3Vjb9Wv58wb_o856WaCQ',
+  '14TuuImqc-RfBqHDiwPn-czVH87C9Q1fH',
+  'your_google_sheet_id'
+]);
+
+function resolveCrmSpreadsheetId() {
+  if (typeof process === 'undefined' || !process.env) return CANONICAL_CRM_SPREADSHEET_ID;
+  const raw = (process.env.GOOGLE_SPREADSHEET_ID || '').trim();
+  if (!raw || LEGACY_BLOCKED_IDS.has(raw)) {
+    process.env.GOOGLE_SPREADSHEET_ID = CANONICAL_CRM_SPREADSHEET_ID;
+    return CANONICAL_CRM_SPREADSHEET_ID;
+  }
+  return raw;
+}
+
+function resolveChatsSpreadsheetId() {
+  if (typeof process === 'undefined' || !process.env) return CANONICAL_CHATS_SPREADSHEET_ID;
+  const raw = (process.env.GOOGLE_CHATS_SPREADSHEET_ID || '').trim();
+  if (!raw || LEGACY_BLOCKED_IDS.has(raw)) {
+    process.env.GOOGLE_CHATS_SPREADSHEET_ID = CANONICAL_CHATS_SPREADSHEET_ID;
+    return CANONICAL_CHATS_SPREADSHEET_ID;
+  }
+  return raw;
+}
+
+function resolveDriveDbFolderId() {
+  if (typeof process === 'undefined' || !process.env) return CANONICAL_DRIVE_DB_FOLDER_ID;
+  const raw = (process.env.GOOGLE_DRIVE_DB_FOLDER_ID || '').trim();
+  if (!raw || LEGACY_BLOCKED_IDS.has(raw)) {
+    process.env.GOOGLE_DRIVE_DB_FOLDER_ID = CANONICAL_DRIVE_DB_FOLDER_ID;
+    return CANONICAL_DRIVE_DB_FOLDER_ID;
+  }
+  return raw;
+}
+
+function loadLocalEnvFile(envFilePath) {
+  if (typeof window !== 'undefined') return;
+  try {
+    const req = eval('require');
+    try {
+      req('dotenv').config({ path: envFilePath || '.env.local' });
+    } catch (_) {
+      const fsMod = req('fs');
+      const pathMod = req('path');
+      const candidates = [
+        envFilePath ? pathMod.resolve(process.cwd(), envFilePath) : pathMod.resolve(process.cwd(), '.env.local'),
+        pathMod.resolve(__dirname, '..', '.env.local')
+      ];
+      for (const targetPath of candidates) {
+        if (fsMod.existsSync(targetPath)) {
+          const raw = fsMod.readFileSync(targetPath, 'utf8');
+          raw.split(/\r?\n/).forEach((line) => {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) return;
+            const eqIdx = trimmed.indexOf('=');
+            if (eqIdx === -1) return;
+            const key = trimmed.slice(0, eqIdx).trim();
+            let val = trimmed.slice(eqIdx + 1).trim();
+            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+              val = val.slice(1, -1);
+            }
+            if (!process.env[key] || LEGACY_BLOCKED_IDS.has(process.env[key])) {
+              process.env[key] = val;
+            }
+          });
+          break;
+        }
+      }
+    }
+  } catch (e) {}
+  resolveCrmSpreadsheetId();
+  resolveChatsSpreadsheetId();
+  resolveDriveDbFolderId();
+}
+
+loadLocalEnvFile();
+
+function createUniversalSheetsClient({ clientEmail, privateKey, scopes }) {
+  const req = eval('require');
+  try {
+    const { google } = req('googleapis');
+    const auth = new google.auth.GoogleAuth({
+      credentials: {
+        client_email: clientEmail,
+        private_key: privateKey
+      },
+      scopes: scopes || ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets']
+    });
+    return google.sheets({ version: 'v4', auth });
+  } catch (_) {
+    const crypto = req('crypto');
+    const https = req('https');
+    let cachedToken = null;
+    let tokenExp = 0;
+
+    const httpsJson = (url, method = 'GET', headers = {}, bodyObj = null) =>
+      new Promise((resolve, reject) => {
+        const httpReq = https.request(url, { method, headers }, (res) => {
+          let data = '';
+          res.on('data', (chunk) => (data += chunk));
+          res.on('end', () => {
+            let parsed = data;
+            try {
+              parsed = JSON.parse(data);
+            } catch (e) {}
+            if (res.statusCode >= 400) {
+              const msg = (parsed && parsed.error && parsed.error.message) || (typeof parsed === 'string' ? parsed : JSON.stringify(parsed));
+              reject(new Error(`HTTP ${res.statusCode}: ${msg}`));
+            } else {
+              resolve({ data: parsed, status: res.statusCode });
+            }
+          });
+        });
+        httpReq.on('error', reject);
+        if (bodyObj !== null) {
+          httpReq.write(typeof bodyObj === 'string' ? bodyObj : JSON.stringify(bodyObj));
+        }
+        httpReq.end();
+      });
+
+    const getToken = async () => {
+      const now = Math.floor(Date.now() / 1000);
+      if (cachedToken && now < tokenExp - 60) return cachedToken;
+      const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+      const scopeStr = Array.isArray(scopes) && scopes.length > 0
+        ? scopes.join(' ')
+        : 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets';
+      const claim = Buffer.from(
+        JSON.stringify({
+          iss: clientEmail,
+          scope: scopeStr,
+          aud: 'https://oauth2.googleapis.com/token',
+          exp: now + 3600,
+          iat: now
+        })
+      ).toString('base64url');
+      const sign = crypto.createSign('RSA-SHA256');
+      sign.update(`${header}.${claim}`);
+      const jwt = `${header}.${claim}.${sign.sign(privateKey, 'base64url')}`;
+      const body = `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`;
+      const res = await httpsJson(
+        'https://oauth2.googleapis.com/token',
+        'POST',
+        { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+      );
+      cachedToken = res.data.access_token;
+      tokenExp = now + 3600;
+      return cachedToken;
+    };
+
+    return {
+      spreadsheets: {
+        get: async ({ spreadsheetId, includeGridData = false }) => {
+          const t = await getToken();
+          const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?includeGridData=${Boolean(includeGridData)}`;
+          return httpsJson(url, 'GET', { Authorization: `Bearer ${t}` });
+        },
+        batchUpdate: async ({ spreadsheetId, requestBody, resource }) => {
+          const t = await getToken();
+          const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}:batchUpdate`;
+          return httpsJson(
+            url,
+            'POST',
+            { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+            requestBody || resource || {}
+          );
+        },
+        values: {
+          get: async ({ spreadsheetId, range }) => {
+            const t = await getToken();
+            const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}`;
+            return httpsJson(url, 'GET', { Authorization: `Bearer ${t}` });
+          },
+          update: async ({ spreadsheetId, range, valueInputOption = 'USER_ENTERED', requestBody, resource }) => {
+            const t = await getToken();
+            const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?valueInputOption=${encodeURIComponent(valueInputOption)}`;
+            return httpsJson(
+              url,
+              'PUT',
+              { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+              requestBody || resource || {}
+            );
+          },
+          append: async ({ spreadsheetId, range, valueInputOption = 'USER_ENTERED', insertDataOption = 'INSERT_ROWS', requestBody, resource }) => {
+            const t = await getToken();
+            const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}:append?valueInputOption=${encodeURIComponent(valueInputOption)}&insertDataOption=${encodeURIComponent(insertDataOption)}`;
+            return httpsJson(
+              url,
+              'POST',
+              { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+              requestBody || resource || {}
+            );
+          },
+          batchUpdate: async ({ spreadsheetId, requestBody, resource }) => {
+            const t = await getToken();
+            const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchUpdate`;
+            return httpsJson(
+              url,
+              'POST',
+              { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+              requestBody || resource || {}
+            );
+          },
+          clear: async ({ spreadsheetId, range, requestBody, resource }) => {
+            const t = await getToken();
+            const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}:clear`;
+            return httpsJson(
+              url,
+              'POST',
+              { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+              requestBody || resource || {}
+            );
+          }
+        }
+      }
+    };
+  }
+}
+
 const SHEETS_REGISTRY = {
   // --- 1. HOME: Главная витрина [Лист 1, sheetId: 101] ---
   HOME: {
@@ -246,6 +473,14 @@ function resolveRange(sheetMap, registryKey, rangeSuffix = 'A:Z') {
 
 module.exports = {
   SHEETS_REGISTRY,
+  CANONICAL_CRM_SPREADSHEET_ID,
+  CANONICAL_CHATS_SPREADSHEET_ID,
+  CANONICAL_DRIVE_DB_FOLDER_ID,
+  loadLocalEnvFile,
+  resolveCrmSpreadsheetId,
+  resolveChatsSpreadsheetId,
+  resolveDriveDbFolderId,
+  createUniversalSheetsClient,
   resolveSheetTitle,
   getLiveSheetMap,
   resolveRange

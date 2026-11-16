@@ -131,8 +131,10 @@ export default function HomeListing({ publicData, contentData }) {
   const [currentContentData, setCurrentContentData] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
-        const saved = localStorage.getItem('vasilisa_live_content_cache');
-        if (saved) {
+        localStorage.removeItem('vasilisa_live_content_cache');
+        localStorage.removeItem('vasilisa_live_public_cache');
+        const saved = localStorage.getItem('vasilisa_couture_v3_content_cache');
+        if (saved && !saved.includes('Villa Turaman') && !saved.includes('16 макро-уроков • Бессрочный доступ')) {
           const parsed = JSON.parse(saved);
           if (parsed && parsed.home && Object.keys(parsed.home).length > 0) {
             return parsed;
@@ -146,8 +148,8 @@ export default function HomeListing({ publicData, contentData }) {
   const [currentPublicData, setCurrentPublicData] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
-        const saved = localStorage.getItem('vasilisa_live_public_cache');
-        if (saved) {
+        const saved = localStorage.getItem('vasilisa_couture_v3_public_cache');
+        if (saved && !saved.includes('Villa Turaman')) {
           const parsed = JSON.parse(saved);
           if (parsed && (parsed.products?.length > 0 || parsed.gallery?.length > 0)) {
             return parsed;
@@ -313,8 +315,8 @@ export default function HomeListing({ publicData, contentData }) {
             setCurrentPublicData(newPublicData);
             try {
               if (typeof window !== 'undefined' && window.localStorage) {
-                localStorage.setItem('vasilisa_live_content_cache', JSON.stringify(newContentData));
-                localStorage.setItem('vasilisa_live_public_cache', JSON.stringify(newPublicData));
+                localStorage.setItem('vasilisa_couture_v3_content_cache', JSON.stringify(newContentData));
+                localStorage.setItem('vasilisa_couture_v3_public_cache', JSON.stringify(newPublicData));
               }
             } catch (storageErr) {
               // Защитное игнорирование переполнения квоты браузера
@@ -357,7 +359,7 @@ export default function HomeListing({ publicData, contentData }) {
       currentContentData.home?.hero_title?.ru ||
       currentContentData.home?.heroTitle?.[lang] ||
       currentContentData.home?.heroTitle?.ru ||
-      'Vasilisa.luneville - вышивка от кутюр [частный бассейн, 10 спальных мест]',
+      'Vasilisa.luneville - школа кутюрной вышивки, наставничество в Мармарисе, арт-отпуска в Турции и бутик',
     subtitle:
       currentContentData.home?.hero_subtitle?.[lang] ||
       currentContentData.home?.hero_subtitle?.ru ||
@@ -367,11 +369,11 @@ export default function HomeListing({ publicData, contentData }) {
     rating:
       currentContentData.home?.hero_rating?.[lang] ||
       currentContentData.home?.hero_rating?.ru ||
-      '4.98',
+      '5.0',
     reviewsCount:
       currentContentData.home?.hero_reviews_count?.[lang] ||
       currentContentData.home?.hero_reviews_count?.ru ||
-      '48 отзывов',
+      '128 отзывов учениц',
     superhostBadge:
       currentContentData.home?.hero_superhost_badge?.[lang] ||
       currentContentData.home?.hero_superhost_badge?.ru ||
@@ -379,7 +381,7 @@ export default function HomeListing({ publicData, contentData }) {
     location:
       currentContentData.home?.hero_location?.[lang] ||
       currentContentData.home?.hero_location?.ru ||
-      'Дальян, Ортаджа, Мугла, Турция',
+      'Мармарис и горная вилла в Мугле, Турция [30 мин от DLM]',
     shareBtn:
       currentContentData.home?.hero_share_btn?.[lang] ||
       currentContentData.home?.hero_share_btn?.ru ||
@@ -391,11 +393,11 @@ export default function HomeListing({ publicData, contentData }) {
     specGuests:
       currentContentData.home?.spec_guests?.[lang] ||
       currentContentData.home?.spec_guests?.ru ||
-      '10 гостей',
+      'Камерные группы до 6 участниц • 1-на-1 в студии',
     specBedrooms:
       currentContentData.home?.spec_bedrooms?.[lang] ||
       currentContentData.home?.spec_bedrooms?.ru ||
-      '4 спальни',
+      '5 направлений: МК, Онлайн, Студия, Ретрит, Бутик',
     specBeds:
       currentContentData.home?.spec_beds?.[lang] ||
       currentContentData.home?.spec_beds?.ru ||
@@ -403,23 +405,23 @@ export default function HomeListing({ publicData, contentData }) {
     specBaths:
       currentContentData.home?.spec_baths?.[lang] ||
       currentContentData.home?.spec_baths?.ru ||
-      '4 ванные комнаты + WC',
+      '6 месяцев личной проверки видео ДЗ',
     aboutTitle:
       currentContentData.home?.about_title?.[lang] ||
       currentContentData.home?.about_title?.ru ||
       currentContentData.home?.aboutTitle?.[lang] ||
       currentContentData.home?.aboutTitle?.ru ||
-      'О Вилле',
+      'О школе, арт-отпусках и доме вышивки Vasilisa.luneville',
     aboutText:
       currentContentData.home?.about_text?.[lang] ||
       currentContentData.home?.about_text?.ru ||
       currentContentData.home?.aboutText?.[lang] ||
       currentContentData.home?.aboutText?.ru ||
-      'Vasilisa.luneville - вышивка от кутюр: это гармоничное сочетание уединения, современного комфорта и первоклассного сервиса для незабываемого отпуска в сердце Дальяна.',
+      'Vasilisa.luneville - международная школа кутюрной и люневильской вышивки с 2015 года, студия индивидуального наставничества в Мармарисе, арт-отпуска на горной вилле в Турции и бутик авторских изделий.',
     aboutBtnMore:
       currentContentData.home?.about_btn_more?.[lang] ||
       currentContentData.home?.about_btn_more?.ru ||
-      'Показать больше об объекте',
+      'Подробно о 5 направлениях школы и бутика',
     heroImage: parseDriveLink(
       currentContentData.home?.hero_image?.media ||
       currentContentData.home?.heroImage?.media ||
@@ -464,7 +466,7 @@ export default function HomeListing({ publicData, contentData }) {
       currentContentData.home?.highlight_2_title?.ru ||
       currentContentData.home?.highlightCheckinTitle?.[lang] ||
       currentContentData.home?.highlightCheckinTitle?.ru ||
-      'Бесконтактное прибытие [Self check-in]',
+      'Мгновенный доступ к урокам навсегда',
     highlightCheckinDesc:
       currentContentData.home?.highlight_2_desc?.[lang] ||
       currentContentData.home?.highlight_2_desc?.ru ||
@@ -476,25 +478,25 @@ export default function HomeListing({ publicData, contentData }) {
       currentContentData.home?.highlight_3_title?.ru ||
       currentContentData.home?.highlightCancellationTitle?.[lang] ||
       currentContentData.home?.highlightCancellationTitle?.ru ||
-      'Бесплатная отмена за 14 дней',
+      'Удержание слота 24ч HOLD и защита квоты 6 мест',
     highlightCancellationDesc:
       currentContentData.home?.highlight_3_desc?.[lang] ||
       currentContentData.home?.highlight_3_desc?.ru ||
       currentContentData.home?.highlightCancellationDesc?.[lang] ||
       currentContentData.home?.highlightCancellationDesc?.ru ||
-      'Полный возврат средств при отмене не позднее чем за 14 суток до даты заезда.',
+      'Фиксация места на арт-отпуске на 24 часа для покупки авиабилетов и прозрачные условия договора оферты.',
     sleepingTitle:
       currentContentData.home?.sleeping_title?.[lang] ||
       currentContentData.home?.sleeping_title?.ru ||
-      'Где вы будете спать',
+      'Варианты размещения на арт-отпуске и обучение в студии',
     amenitiesTitle:
       currentContentData.home?.amenities_title?.[lang] ||
       currentContentData.home?.amenities_title?.ru ||
-      'Что есть в этом жилье',
+      'Материалы, инструменты и что включено в обучение и арт-отпуск',
     amenitiesBtnAll:
       currentContentData.home?.amenities_btn_all?.[lang] ||
       currentContentData.home?.amenities_btn_all?.ru ||
-      'Показать все удобства',
+      'Показать все материалы и условия',
     mainAmenities: currentContentData.home?.mainAmenities || [],
     amenitiesGrouped: currentContentData.home?.amenitiesGrouped || [],
     reviewsData: currentContentData.home?.reviewsData || null,
@@ -503,17 +505,17 @@ export default function HomeListing({ publicData, contentData }) {
       currentContentData.home?.location_title?.ru ||
       currentContentData.home?.locationTitle?.[lang] ||
       currentContentData.home?.locationTitle?.ru ||
-      'Расположение: Дальян, Ортаджа, Мугла, Турция',
+      'Локация: Студия в Мармарисе и горная вилла в Мугле, Турция',
     locationDesc:
       currentContentData.home?.location_desc?.[lang] ||
       currentContentData.home?.location_desc?.ru ||
       currentContentData.home?.locationDesc?.[lang] ||
       currentContentData.home?.locationDesc?.ru ||
-      'Вилла расположена в тихом зеленом районе в 5 минутах ходьбы от набережной реки Дальян.',
+      'Очная мастерская в центре Мармариса и уединенная горная вилла с бассейном и садом в 30 минутах от аэропорта Даламан [DLM].',
     locationBadge:
       currentContentData.home?.location_badge?.[lang] ||
       currentContentData.home?.location_badge?.ru ||
-      'GPS: 36.8336° N, 28.6439° E • 25 минут от аэропорта Даламан [DLM]',
+      'Мармарис и Мугла • 30 минут от международного аэропорта Даламан [DLM]',
     locationImage:
       parseDriveLink(
         currentContentData.home?.location_image?.media ||
@@ -544,27 +546,27 @@ export default function HomeListing({ publicData, contentData }) {
     hostCardHelpText:
       currentContentData.home?.host_card_help_text?.[lang] ||
       currentContentData.home?.host_card_help_text?.ru ||
-      'Помощь в организации трансфера, персональных туров по озеру Кёйджегиз и бронирования ресторанов',
+      'Постановка руки на люневильском крючке, разбор 20-30 сек видео ДЗ, организация арт-отпусков и трансфера из аэропорта DLM',
     hostCardBtn:
       currentContentData.home?.host_card_btn?.[lang] ||
       currentContentData.home?.host_card_btn?.ru ||
-      'Написать хозяину',
+      'Написать Василисе',
     hostCardCredo:
       currentContentData.home?.host_card_credo?.[lang] ||
       currentContentData.home?.host_card_credo?.ru ||
-      '«Хочешь сделать хорошо - сделай сам»',
+      '«Каждый стежок от кутюр рождается из любви к деталям и бережной постановки руки»',
     hostCardDream:
       currentContentData.home?.host_card_dream?.[lang] ||
       currentContentData.home?.host_card_dream?.ru ||
-      'База: Мармарис • Мечта: Португалия и Атлантический океан',
+      'Студия: Мармарис, Турция • Выпускницы более чем в 25 странах мира',
     hostCardHobbies:
       currentContentData.home?.host_card_hobbies?.[lang] ||
       currentContentData.home?.host_card_hobbies?.ru ||
-      'Велоспорт, Парусный спорт, Живая природа Дальяна',
+      'Люневильская вышивка, Французские пайетки, Шелковая синель, Высокая мода',
     hostCardTravel:
       currentContentData.home?.host_card_travel?.[lang] ||
       currentContentData.home?.host_card_travel?.ru ||
-      'Дубай [3 поездки], Абу-Даби [март 2026 г.]',
+      '4 потока арт-отпусков 2027: май, июнь, сентябрь, октябрь',
     hostCardTax:
       currentContentData.home?.host_card_tax?.[lang] ||
       currentContentData.home?.host_card_tax?.ru ||
@@ -572,11 +574,11 @@ export default function HomeListing({ publicData, contentData }) {
     landmarksTitle:
       currentContentData.home?.landmarks_title?.[lang] ||
       currentContentData.home?.landmarks_title?.ru ||
-      '14 географических ориентиров Дальяна',
+      '14 ключевых локаций студии в Мармарисе и маршрутов арт-отпуска',
     landmarksSubtitle:
       currentContentData.home?.landmarks_subtitle?.[lang] ||
       currentContentData.home?.landmarks_subtitle?.ru ||
-      'Точные расстояния и тайминг от виллы • Пешеходная доступность центра и заповедная природа',
+      'Студия в Мармарисе, горная вилла в Мугле, аэропорт Даламан [DLM], Акьяка, река Азмак, Дальян и пляж Изтузу',
     landmarksAddress:
       currentContentData.home?.landmarks_address?.[lang] ||
       currentContentData.home?.landmarks_address?.ru ||

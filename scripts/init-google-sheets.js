@@ -8,9 +8,16 @@
 // 100% Zero-Brackets & Zero-Emdash Стандарт.
 // ==============================================================================
 
-require('dotenv').config({ path: '.env.local' });
-const { google } = require('googleapis');
-const { SHEETS_REGISTRY, getLiveSheetMap, resolveRange } = require('../utils/sheetsRegistry');
+const {
+  SHEETS_REGISTRY,
+  loadLocalEnvFile,
+  resolveCrmSpreadsheetId,
+  resolveChatsSpreadsheetId,
+  createUniversalSheetsClient,
+  getLiveSheetMap,
+  resolveRange
+} = require('../utils/sheetsRegistry');
+loadLocalEnvFile();
 const { SMART_TEMPLATES } = require('../utils/templatesData');
 const {
   MASTER_ABOUT_SECTIONS,
@@ -152,7 +159,7 @@ const initializeSpreadsheet = async () => {
 
   const clientEmail = (process.env.GOOGLE_CLIENT_EMAIL || '').trim();
   const rawKey = (process.env.GOOGLE_PRIVATE_KEY || '').trim();
-  const spreadsheetId = (process.env.GOOGLE_SPREADSHEET_ID || '').trim();
+  const spreadsheetId = resolveCrmSpreadsheetId();
 
   // Проверка на отсутствующие или демонстрационные (placeholder) учетные данные
   const isPlaceholder =
@@ -191,16 +198,12 @@ const initializeSpreadsheet = async () => {
   }
 
   try {
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: clientEmail,
-        private_key: parsedKey
-      },
+    const sheets = createUniversalSheetsClient({
+      clientEmail,
+      privateKey: parsedKey,
       scopes: ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets']
     });
-
-    const sheets = google.sheets({ version: 'v4', auth });
-    const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+    const spreadsheetId = resolveCrmSpreadsheetId();
 
     // Считываем список существующих листов
     const ss = await sheets.spreadsheets.get({ spreadsheetId });
@@ -575,7 +578,7 @@ const initializeSpreadsheet = async () => {
     }
 
     // --- Инициализация и смарт-форматирование таблицы чатов GOOGLE_CHATS_SPREADSHEET_ID ---
-    const chatsSpreadsheetId = process.env.GOOGLE_CHATS_SPREADSHEET_ID;
+    const chatsSpreadsheetId = resolveChatsSpreadsheetId();
     if (chatsSpreadsheetId) {
       console.log('💬 Проверка и смарт-форматирование таблицы чатов...');
       try {

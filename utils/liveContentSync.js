@@ -14,7 +14,7 @@
 import { google } from 'googleapis';
 import fs from 'fs';
 import path from 'path';
-import { getLiveSheetMap, resolveRange } from './sheetsRegistry';
+import { getLiveSheetMap, resolveRange, resolveCrmSpreadsheetId } from './sheetsRegistry';
 import { MASTER_ABOUT_SECTIONS, MASTER_HOME_MAP, buildHomeDerivedCollections } from './masterSeedContent';
 import { resolveTemplate } from './templateResolver';
 
@@ -112,7 +112,7 @@ export function readLocalFallback() {
  * Прямой запрос к Google Sheets API и парсинг всех активных вкладок
  */
 export async function fetchLiveContentFromGoogleSheets() {
-  const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID || '1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4';
+  const spreadsheetId = resolveCrmSpreadsheetId();
   const clientEmail = (process.env.GOOGLE_CLIENT_EMAIL || '').trim();
   const rawKey = (process.env.GOOGLE_PRIVATE_KEY || '').trim();
 
@@ -186,9 +186,7 @@ export async function fetchLiveContentFromGoogleSheets() {
       return response.data.values || [];
     } catch (err) {
       console.warn(`[LiveContentSync] Не удалось прочитать диапазон ${range}:`, err.message);
-      if (err.message && err.message.includes('invalid_grant')) {
-        hasReadErrors = true;
-      }
+      hasReadErrors = true;
       return [];
     }
   };

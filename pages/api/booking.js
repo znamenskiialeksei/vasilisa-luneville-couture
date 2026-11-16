@@ -785,8 +785,8 @@ export default async function handler(req, res) {
 
   let serviceAccountAuth, oauth2Client;
   let sheets, drive, tasksApi, calendarApi;
-  let spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID || '1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4';
-  let chatsSpreadsheetId = process.env.GOOGLE_CHATS_SPREADSHEET_ID || '1auLYHrJQW-OnhUVJ3iLcXUoTY4b2Phg8MXbIEt2kHgE';
+  let spreadsheetId = ((process.env.GOOGLE_SPREADSHEET_ID && !['1LQ1B-e3yzt587C2-fIo_ztAJnQainc5zh8n6i0O2g_s','10kAzhvlGVxkmS_RSIjmSz5m3Vjb9Wv58wb_o856WaCQ','14TuuImqc-RfBqHDiwPn-czVH87C9Q1fH','your_google_sheet_id'].includes(process.env.GOOGLE_SPREADSHEET_ID.trim())) ? process.env.GOOGLE_SPREADSHEET_ID.trim() : '1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4') || '1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4';
+  let chatsSpreadsheetId = ((process.env.GOOGLE_CHATS_SPREADSHEET_ID && !['1LQ1B-e3yzt587C2-fIo_ztAJnQainc5zh8n6i0O2g_s','10kAzhvlGVxkmS_RSIjmSz5m3Vjb9Wv58wb_o856WaCQ','14TuuImqc-RfBqHDiwPn-czVH87C9Q1fH'].includes(process.env.GOOGLE_CHATS_SPREADSHEET_ID.trim())) ? process.env.GOOGLE_CHATS_SPREADSHEET_ID.trim() : '1auLYHrJQW-OnhUVJ3iLcXUoTY4b2Phg8MXbIEt2kHgE') || '1auLYHrJQW-OnhUVJ3iLcXUoTY4b2Phg8MXbIEt2kHgE';
 
   // Авторизация в Google Service Account (только при наличии реальных, не демонстрационных ключей)
   const clientEmail = (process.env.GOOGLE_CLIENT_EMAIL || '').trim();
@@ -794,7 +794,7 @@ export default async function handler(req, res) {
   const isRealServiceAccount =
     clientEmail &&
     rawKey &&
-    process.env.GOOGLE_SPREADSHEET_ID !== 'your_google_sheet_id' &&
+    ((process.env.GOOGLE_SPREADSHEET_ID && !['1LQ1B-e3yzt587C2-fIo_ztAJnQainc5zh8n6i0O2g_s','10kAzhvlGVxkmS_RSIjmSz5m3Vjb9Wv58wb_o856WaCQ','14TuuImqc-RfBqHDiwPn-czVH87C9Q1fH','your_google_sheet_id'].includes(process.env.GOOGLE_SPREADSHEET_ID.trim())) ? process.env.GOOGLE_SPREADSHEET_ID.trim() : '1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4') !== 'your_google_sheet_id' &&
     !clientEmail.includes('your-service-account-email') &&
     !rawKey.includes('YOUR_PRIVATE_KEY');
 

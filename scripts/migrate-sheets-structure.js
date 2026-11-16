@@ -7,9 +7,13 @@
 // сохраняя уникальные числовые sheetId без малейшей потери данных.
 // ==============================================================================
 
-require('dotenv').config({ path: '.env.local' });
-const { google } = require('googleapis');
-const { SHEETS_REGISTRY } = require('../utils/sheetsRegistry');
+const {
+  SHEETS_REGISTRY,
+  loadLocalEnvFile,
+  resolveCrmSpreadsheetId,
+  createUniversalSheetsClient
+} = require('../utils/sheetsRegistry');
+loadLocalEnvFile();
 
 async function migrateSheetsStructure() {
   console.log('================================================================================');
@@ -18,7 +22,7 @@ async function migrateSheetsStructure() {
 
   const clientEmail = (process.env.GOOGLE_CLIENT_EMAIL || '').trim();
   const rawKey = (process.env.GOOGLE_PRIVATE_KEY || '').trim();
-  const spreadsheetId = (process.env.GOOGLE_SPREADSHEET_ID || '').trim();
+  const spreadsheetId = resolveCrmSpreadsheetId();
 
   const isPlaceholder =
     !clientEmail ||
@@ -49,15 +53,11 @@ async function migrateSheetsStructure() {
   const parsedKey = parsePrivateKey(rawKey);
 
   try {
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: clientEmail,
-        private_key: parsedKey
-      },
+    const sheets = createUniversalSheetsClient({
+      clientEmail,
+      privateKey: parsedKey,
       scopes: ['https://www.googleapis.com/auth/spreadsheets']
     });
-
-    const sheets = google.sheets({ version: 'v4', auth });
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
     const liveSheets = meta.data.sheets || [];
 

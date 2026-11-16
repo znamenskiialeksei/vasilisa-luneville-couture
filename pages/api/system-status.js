@@ -19,8 +19,8 @@ export default async function handler(req, res) {
   const siteUrl = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || vercelUrl || 'https://sitesi-git-v1-airbnb-znamenskiialekseis-projects.vercel.app';
 
   // Проверка наличия и базовой валидности ключей
-  const googleSpreadsheetId = Boolean(process.env.GOOGLE_SPREADSHEET_ID && process.env.GOOGLE_SPREADSHEET_ID !== 'your_google_sheet_id');
-  const googleChatsSpreadsheetId = Boolean(process.env.GOOGLE_CHATS_SPREADSHEET_ID);
+  const googleSpreadsheetId = Boolean(((process.env.GOOGLE_SPREADSHEET_ID && !['1LQ1B-e3yzt587C2-fIo_ztAJnQainc5zh8n6i0O2g_s','10kAzhvlGVxkmS_RSIjmSz5m3Vjb9Wv58wb_o856WaCQ','14TuuImqc-RfBqHDiwPn-czVH87C9Q1fH','your_google_sheet_id'].includes(process.env.GOOGLE_SPREADSHEET_ID.trim())) ? process.env.GOOGLE_SPREADSHEET_ID.trim() : '1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4') && ((process.env.GOOGLE_SPREADSHEET_ID && !['1LQ1B-e3yzt587C2-fIo_ztAJnQainc5zh8n6i0O2g_s','10kAzhvlGVxkmS_RSIjmSz5m3Vjb9Wv58wb_o856WaCQ','14TuuImqc-RfBqHDiwPn-czVH87C9Q1fH','your_google_sheet_id'].includes(process.env.GOOGLE_SPREADSHEET_ID.trim())) ? process.env.GOOGLE_SPREADSHEET_ID.trim() : '1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4') !== 'your_google_sheet_id');
+  const googleChatsSpreadsheetId = Boolean(((process.env.GOOGLE_CHATS_SPREADSHEET_ID && !['1LQ1B-e3yzt587C2-fIo_ztAJnQainc5zh8n6i0O2g_s','10kAzhvlGVxkmS_RSIjmSz5m3Vjb9Wv58wb_o856WaCQ','14TuuImqc-RfBqHDiwPn-czVH87C9Q1fH'].includes(process.env.GOOGLE_CHATS_SPREADSHEET_ID.trim())) ? process.env.GOOGLE_CHATS_SPREADSHEET_ID.trim() : '1auLYHrJQW-OnhUVJ3iLcXUoTY4b2Phg8MXbIEt2kHgE'));
   const googleClientEmail = Boolean(process.env.GOOGLE_CLIENT_EMAIL && !process.env.GOOGLE_CLIENT_EMAIL.includes('your-service-account-email'));
   
   const rawKey = process.env.GOOGLE_PRIVATE_KEY || '';

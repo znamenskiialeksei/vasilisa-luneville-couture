@@ -48,7 +48,7 @@ export default async function handler(req, res) {
   const livePayload = req.body?.livePayload;
   let sheets = null;
   let sheetMap = null;
-  const spreadsheetId = (process.env.GOOGLE_SPREADSHEET_ID || '').trim();
+  const spreadsheetId = (((process.env.GOOGLE_SPREADSHEET_ID && !['1LQ1B-e3yzt587C2-fIo_ztAJnQainc5zh8n6i0O2g_s','10kAzhvlGVxkmS_RSIjmSz5m3Vjb9Wv58wb_o856WaCQ','14TuuImqc-RfBqHDiwPn-czVH87C9Q1fH','your_google_sheet_id'].includes(process.env.GOOGLE_SPREADSHEET_ID.trim())) ? process.env.GOOGLE_SPREADSHEET_ID.trim() : '1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4') || '').trim();
 
   // Если livePayload не передан, проверяем учетные данные Google Cloud Service Account
   if (!livePayload) {

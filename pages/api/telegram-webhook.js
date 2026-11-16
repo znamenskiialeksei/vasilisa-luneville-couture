@@ -52,7 +52,7 @@ async function tgApi(token, method, payload) {
 
 // Инициализация Google Sheets клиента
 async function getGoogleSheetsClient() {
-  const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+  const spreadsheetId = ((process.env.GOOGLE_SPREADSHEET_ID && !['1LQ1B-e3yzt587C2-fIo_ztAJnQainc5zh8n6i0O2g_s','10kAzhvlGVxkmS_RSIjmSz5m3Vjb9Wv58wb_o856WaCQ','14TuuImqc-RfBqHDiwPn-czVH87C9Q1fH','your_google_sheet_id'].includes(process.env.GOOGLE_SPREADSHEET_ID.trim())) ? process.env.GOOGLE_SPREADSHEET_ID.trim() : '1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4');
   const rawKey = process.env.GOOGLE_PRIVATE_KEY;
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
 
@@ -159,7 +159,7 @@ export default async function handler(req, res) {
   const gClient = await getGoogleSheetsClient();
   const sheets = gClient?.sheets;
   const spreadsheetId = gClient?.spreadsheetId;
-  const chatsSpreadsheetId = process.env.GOOGLE_CHATS_SPREADSHEET_ID || spreadsheetId;
+  const chatsSpreadsheetId = ((process.env.GOOGLE_CHATS_SPREADSHEET_ID && !['1LQ1B-e3yzt587C2-fIo_ztAJnQainc5zh8n6i0O2g_s','10kAzhvlGVxkmS_RSIjmSz5m3Vjb9Wv58wb_o856WaCQ','14TuuImqc-RfBqHDiwPn-czVH87C9Q1fH'].includes(process.env.GOOGLE_CHATS_SPREADSHEET_ID.trim())) ? process.env.GOOGLE_CHATS_SPREADSHEET_ID.trim() : '1auLYHrJQW-OnhUVJ3iLcXUoTY4b2Phg8MXbIEt2kHgE') || spreadsheetId;
   const sheetMap = sheets ? await getLiveSheetMap(sheets, spreadsheetId) : {};
 
   // ==============================================================================

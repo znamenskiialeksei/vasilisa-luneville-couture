@@ -25,7 +25,7 @@ function parsePrivateKey(rawKey) {
  * Сохранение задачи в лист CRM 📋 Задачи и Поручения Секретаря
  */
 async function appendTaskToCrmSheet({ direction, taskText, status = 'Новая', resultUrl = '', assignee = 'Мастер Василиса Боровикова' }) {
-  const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+  const spreadsheetId = ((process.env.GOOGLE_SPREADSHEET_ID && !['1LQ1B-e3yzt587C2-fIo_ztAJnQainc5zh8n6i0O2g_s','10kAzhvlGVxkmS_RSIjmSz5m3Vjb9Wv58wb_o856WaCQ','14TuuImqc-RfBqHDiwPn-czVH87C9Q1fH','your_google_sheet_id'].includes(process.env.GOOGLE_SPREADSHEET_ID.trim())) ? process.env.GOOGLE_SPREADSHEET_ID.trim() : '1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4');
   const clientEmail = (process.env.GOOGLE_CLIENT_EMAIL || '').trim();
   const rawKey = (process.env.GOOGLE_PRIVATE_KEY || '').trim();
 
