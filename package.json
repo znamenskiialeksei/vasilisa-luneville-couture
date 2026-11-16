@@ -2,10 +2,11 @@
   "name": "vasilisa-luneville-couture-platform",
   "version": "1.0.0",
   "private": true,
-  "description": "Премиальная платформа аренды виллы Vasilisa.luneville - вышивка от кутюр в стиле Haute Couture с разделением личных кабинетов хозяина и гостя",
+  "description": "Платформа школы кутюрной вышивки, индивидуального наставничества, арт-отпусков в Турции и бутика Vasilisa.luneville",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "vercel-build": "next build",
     "start": "next start",
     "lint": "next lint",
     "init-db": "node scripts/init-google-sheets.js",
