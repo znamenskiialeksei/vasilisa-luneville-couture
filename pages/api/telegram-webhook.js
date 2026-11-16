@@ -506,7 +506,7 @@ export default async function handler(req, res) {
     if (data === 'menu_revalidate') {
       await tgApi(token, 'answerCallbackQuery', { callback_query_id: cqId, text: '⚡ Запуск ревалидации...' });
       try {
-        const siteUrl = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://sitesi-git-v1-couture-vasilisalunevilles-projects.vercel.app';
+        const siteUrl = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://sitesi-git-v1-airbnb-znamenskiialekseis-projects.vercel.app';
         const secret = process.env.REVALIDATE_SECRET_TOKEN || '';
         if (secret) {
           await fetch(`${siteUrl.replace(/\/+$/, '')}/api/revalidate?secret=${secret}`).catch(() => {});
@@ -1438,7 +1438,7 @@ export default async function handler(req, res) {
         'Дополнительные операции:\n' +
         '• ⏸️ Режим обслуживания Vercel 503: pwsh -File .\\pause_site.ps1\n' +
         '• ▶️ Возобновление работы сайта: pwsh -File .\\resume_site.ps1\n' +
-        '• 📤 Выгрузка ветки v1-couture: pwsh -File .\\push_project_to_github.ps1 -Target v1\n' +
+        '• 📤 Выгрузка ветки v1-airbnb: pwsh -File .\\push_project_to_github.ps1 -Target v1\n' +
         '• 🔄 Полная синхронизация main: pwsh -File .\\push_project_to_github.ps1 -Target main';
 
       await tgApi(token, 'sendMessage', {
@@ -2232,7 +2232,7 @@ export default async function handler(req, res) {
         'Дополнительные операции:\n' +
         '• ⏸️ Режим обслуживания Vercel 503: pwsh -File .\\pause_site.ps1\n' +
         '• ▶️ Возобновление работы сайта: pwsh -File .\\resume_site.ps1\n' +
-        '• 📤 Выгрузка ветки v1-couture: pwsh -File .\\push_project_to_github.ps1 -Target v1\n' +
+        '• 📤 Выгрузка ветки v1-airbnb: pwsh -File .\\push_project_to_github.ps1 -Target v1\n' +
         '• 🔄 Полная синхронизация main: pwsh -File .\\push_project_to_github.ps1 -Target main';
 
       await tgApi(token, 'sendMessage', {

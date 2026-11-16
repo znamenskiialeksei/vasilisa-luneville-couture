@@ -5,13 +5,13 @@
 # Редакция:       16.11.2026 00:55 | ПЛАН: 161120260055 ПЛАН Фикс vercel_json в pause_site.md
 # Тег:            [TAG: VILLA-VERCEL-RESUME-CLEANUP-161120260055]
 # Кодировка:      UTF-8 с BOM [\uFEFF] - нативный стандарт VS Code и PowerShell 7
-# Целевая ветка:  v1-couture
+# Целевая ветка:  v1-airbnb
 # ===============================================================================
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-$TargetBranch = "v1-couture"
+$TargetBranch = "v1-airbnb"
 $ProjectTitle = "Vasilisa.luneville - вышивка от кутюр Haute Couture Platform"
 
 if ($PSScriptRoot) {
@@ -62,7 +62,7 @@ if (-not $filesRemoved) {
     Write-Host "  [ИНФО] Файлы режима обслуживания уже отсутствовали на диске." -ForegroundColor Yellow
 }
 
-# 2. Фиксация в Git и отправка в ветку v1-couture
+# 2. Фиксация в Git и отправка в ветку v1-airbnb
 Write-Host "[2/3] Фиксация изменений в Git и отправка коммита..." -ForegroundColor Cyan
 try {
     $WorkspaceRoot = $ProjectRoot

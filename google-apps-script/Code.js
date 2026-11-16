@@ -310,7 +310,7 @@ function onOpen() {
       .addItem("💾 2. Сохранить текущую таблицу как эталон : Запись в masterSeedContent.js и content.json", "saveMasterSeedInteractive")
       .addItem("📂 3. Восстановление из Google Drive : Проводник по облачным слепкам 10 версий", "openDriveSnapshotExplorerModal")
       .addItem("☁️ 4. Создание слепка в Google Drive : Сохранение снимка базы в облачный архив 10 версий", "createDriveSnapshotInteractive")
-      .addItem("🐙 5. Прямой коммит masterSeed в GitHub : Ветки main и v1-couture через REST API", "commitMasterSeedToGitHubInteractive")
+      .addItem("🐙 5. Прямой коммит masterSeed в GitHub : Ветки main и v1-airbnb через REST API", "commitMasterSeedToGitHubInteractive")
       .addItem("📥 6. Синхронизация Git Pull : Проверка статуса ветки и получение обновлений", "openGitPullStatusModal")
       .addSeparator()
       .addItem("⚡ 7. Мгновенная публикация : Отправка изменений из таблицы на сайт", "triggerRevalidateWebhook")
@@ -758,17 +758,17 @@ function ensureAutoSyncTriggerInstalled_() {
  * Интеллектуальное определение рабочего URL сайта платформы: без localhost
  * Приоритет: 1. Script Properties SITE_URL [строго без localhost]
  *            2. Параметр vercel_url из листа SETTINGS
- *            3. Боевой production URL Vercel ветки v1-couture
+ *            3. Боевой production URL Vercel ветки v1-airbnb
  */
 function getEffectiveSiteUrl_() {
-  var targetUrl = 'https://www.vasilisa-luneville.com';
+  var targetUrl = 'https://sitesi-git-v1-airbnb-znamenskiialekseis-projects.vercel.app';
   try {
     var props = PropertiesService.getScriptProperties();
     if (!props) return targetUrl;
     var siteUrl = (props.getProperty('SITE_URL') || '').trim().replace(/\/+$/, '');
 
     // Принудительно отдаем канонический боевой домен виллы, если указан localhost или устаревший URL
-    if (!siteUrl || siteUrl.indexOf('localhost') !== -1 || siteUrl.indexOf('127.0.0.1') !== -1 || siteUrl.indexOf('sitesi-git-v1-couture') !== -1) {
+    if (!siteUrl || siteUrl.indexOf('localhost') !== -1 || siteUrl.indexOf('127.0.0.1') !== -1 || siteUrl.indexOf('sitesi-git-v1-airbnb') !== -1) {
       try {
         props.setProperty('SITE_URL', targetUrl);
         props.setProperty('REVALIDATE_API_URL', targetUrl + '/api/revalidate');
@@ -862,9 +862,9 @@ function triggerRevalidateWebhook() {
 
   // Список целевых эндпоинтов: канонический боевой домен и резервные адреса
   var targetBases = [
-    'https://www.vasilisa-luneville.com',
+    'https://sitesi-git-v1-airbnb-znamenskiialekseis-projects.vercel.app',
     siteUrl,
-    'https://sitesi-git-v1-couture-vasilisalunevilles-projects.vercel.app'
+    'https://sitesi-git-v1-airbnb-znamenskiialekseis-projects.vercel.app'
   ];
 
   var uniqueBases = [];
@@ -1974,7 +1974,7 @@ function setupScriptPropertiesInteractive() {
   var ui = SpreadsheetApp.getUi();
   var scriptProperties = PropertiesService.getScriptProperties();
 
-  var siteUrl = ui.prompt("Настройка SITE_URL", "Укажите публичный адрес сайта платформы:\nПример: https://www.vasilisa-luneville.com", ui.ButtonSet.OK_CANCEL);
+  var siteUrl = ui.prompt("Настройка SITE_URL", "Укажите публичный адрес сайта платформы:\nПример: https://sitesi-git-v1-airbnb-znamenskiialekseis-projects.vercel.app", ui.ButtonSet.OK_CANCEL);
   if (siteUrl.getSelectedButton() === ui.Button.OK && siteUrl.getResponseText().trim()) {
     var cleanSiteUrl = siteUrl.getResponseText().trim().replace(/\/+$/, '');
     scriptProperties.setProperty('SITE_URL', cleanSiteUrl);
@@ -2029,7 +2029,7 @@ function viewCurrentScriptProperties() {
 
 function setupDefaultScriptProperties() {
   var scriptProperties = PropertiesService.getScriptProperties();
-  var defaultUrl = 'https://www.vasilisa-luneville.com';
+  var defaultUrl = 'https://sitesi-git-v1-airbnb-znamenskiialekseis-projects.vercel.app';
   scriptProperties.setProperties({
     'SITE_URL': defaultUrl,
     'REVALIDATE_API_URL': defaultUrl + '/api/revalidate',
@@ -3642,8 +3642,8 @@ function setupGitHubPropertiesInteractive() {
   if (resToken.getSelectedButton() !== ui.Button.OK) return;
   var token = resToken.getResponseText().trim() || currentToken;
 
-  var currentRepo = props.getProperty('GITHUB_REPO') || 'vasilisaluneville/Sitesi';
-  var resRepo = ui.prompt('Настройка GITHUB_REPO', 'Введите репозиторий GitHub [owner/repo]:\nПо умолчанию: vasilisaluneville/Sitesi', ui.ButtonSet.OK_CANCEL);
+  var currentRepo = props.getProperty('GITHUB_REPO') || 'znamenskiialeksei/Sitesi';
+  var resRepo = ui.prompt('Настройка GITHUB_REPO', 'Введите репозиторий GitHub [owner/repo]:\nПо умолчанию: znamenskiialeksei/Sitesi', ui.ButtonSet.OK_CANCEL);
   if (resRepo.getSelectedButton() !== ui.Button.OK) return;
   var repo = resRepo.getResponseText().trim() || currentRepo;
 
@@ -3662,7 +3662,7 @@ function commitMasterSeedToGitHubInteractive() {
   var ui = SpreadsheetApp.getUi();
   var props = PropertiesService.getScriptProperties();
   var token = props.getProperty('GITHUB_TOKEN');
-  var repo = props.getProperty('GITHUB_REPO') || 'vasilisaluneville/Sitesi';
+  var repo = props.getProperty('GITHUB_REPO') || 'znamenskiialeksei/Sitesi';
 
   if (!token) {
     var promptRes = ui.prompt(
@@ -3703,7 +3703,7 @@ function commitMasterSeedToGitHubInteractive() {
     var encodedContent = Utilities.base64Encode(codeContent, Utilities.Charset.UTF_8);
     var commitMessage = 'feat: фиксация базы данных из Google Таблицы [' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm:ss') + ']';
 
-    var branches = ['v1-couture', 'main'];
+    var branches = ['v1-airbnb', 'main'];
     var successBranches = [];
 
     for (var b = 0; b < branches.length; b++) {

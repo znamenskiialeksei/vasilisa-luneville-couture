@@ -49,6 +49,6 @@
 
 ### БЛОК III - IX: CRM, VERCEL, БЭКАПЫ, НАКОПИТЕЛЬ И АНТИПАТТЕРНЫ
 * **Блок III:** Строгая точка с запятой `;` в формулах русской локали, `RichTextValue` вместо `=HYPERLINK()`, формат Plain Text `@` с префиксом `'` для телефонов `+79213047892` и `+905455983211`.
-* **Блок IV:** Монопроект `vasilisa-luneville-couture-platform`, ветки `main` и `v1-couture`, режим технического обслуживания HTTP 503 (`pause_site.ps1` / `resume_site.ps1`).
+* **Блок IV:** Монопроект `vasilisa-luneville-couture-platform`, ветки `main` и `v1-airbnb`, режим технического обслуживания HTTP 503 (`pause_site.ps1` / `resume_site.ps1`).
 * **Блок V:** Монолитный скрипт `deploy-vasilisa-luneville-couture.sh`, двухуровневый бэкап `_BACKUPS` и `СОХР_ПРОЕКТЫ` (`create_project_backup.ps1`), ступени отката (`create_rollback_stage.ps1`, `restore_rollback_stage.ps1`).
 * **Блок VI:** Трехуровневый Накопитель (Уровень 1 Корень ⇄ Уровень 2 Накопитель SSOT ⇄ Уровень 3 Запускатор перенос) и каскад `apply_settings.ps1`.

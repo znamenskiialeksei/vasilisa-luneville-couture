@@ -8,13 +8,13 @@
 # Уровень Б:      Актуализация реквизитов владельца в шаблоне заглушки HTTP 503 и Edge Middleware [Telegram: @limonnavillevturkey, WhatsApp: +90 545 598 32 11, Официальный VKN: TR-VASILISA-VKN Мармарис / Мугла].
 # Тег:            [TAG: VILLA-OWNER-CONTACTS-SYNC-161120260902]
 # Кодировка:      UTF-8 с BOM [\uFEFF] - нативный стандарт VS Code и PowerShell 7
-# Целевая ветка:  v1-couture
+# Целевая ветка:  v1-airbnb
 # ===============================================================================
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-$TargetBranch = "v1-couture"
+$TargetBranch = "v1-airbnb"
 $ProjectTitle = "Vasilisa.luneville - вышивка от кутюр Haute Couture Platform"
 
 if ($PSScriptRoot) {
@@ -293,7 +293,7 @@ $NpmrcContent = "loglevel=error`nfund=false`naudit=false`n"
 
 Write-Host "  [OK] Конфигурации vercel.json и .npmrc записаны строго в UTF-8 без BOM." -ForegroundColor Green
 
-# 3. Фиксация в Git и отправка в ветку v1-couture [идентично эталону resume_site.ps1]
+# 3. Фиксация в Git и отправка в ветку v1-airbnb [идентично эталону resume_site.ps1]
 Write-Host "[3/3] Фиксация изменений в Git и отправка коммита в $TargetBranch..." -ForegroundColor Cyan
 try {
     $WorkspaceRoot = $ProjectRoot
