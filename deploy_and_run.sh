@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# VASILISA.LUNEVILLE couture PLATFORM — МАСТЕР-СКРИПТ АВТОМАТИЗАЦИИ И РАЗВЕРТЫВАНИЯ
+# VASILISA.LUNEVILLE COUTURE PLATFORM - МАСТЕР-СКРИПТ АВТОМАТИЗАЦИИ И ЗАПУСКА
 # Скрипт: deploy_and_run.sh
-# Назначение: Развертывание платформы в 1 клик, проверка Node.js/npm, установка
-#             зависимостей, настройка VS Code tasks, авто-очистка портов и запуск.
+# Проект: Vasilisa.luneville - вышивка от кутюр [vasilisa-luneville-couture-platform]
+# Основатель и ведущий мастер: Василиса Боровикова [Vasilisa Borovikova]
+# Таблица №1 CRM [15 листов 101..115]: 1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4
+# Таблица №2 Чатов [7 колонок A..G]:   1auLYHrJQW-OnhUVJ3iLcXUoTY4b2Phg8MXbIEt2kHgE
+# Папка БД Drive:                      1DWd60F6n1i1mYdceLZx8RwHjVDGypz_d
 # ==============================================================================
 
 BOLD='\033[1m'
@@ -20,36 +23,22 @@ cd "$SCRIPT_DIR" || exit 1
 print_banner() {
     clear
     echo -e "${CYAN}${BOLD}===============================================================================${RESET}"
-    echo -e "${YELLOW}${BOLD}  ⚡ VASILISA.LUNEVILLE couture PLATFORM v2.0 — АВТОМАТИЗИРОВАННЫЙ СТАРТ${RESET}"
-    echo -e "${CYAN}  Владелец: Vasilisa Borovikova | Объект: Vasilisa.luneville - вышивка от кутюр (Marmaris, Turkey)${RESET}"
-    echo -e "${CYAN}  Налоговый номер: VKN TR-VASILISA-VKN | Раздельные кабинеты: Гость / Хозяин${RESET}"
+    echo -e "${YELLOW}${BOLD}  ⚡ VASILISA.LUNEVILLE COUTURE PLATFORM v2.0 - АВТОМАТИЗИРОВАННЫЙ СТАРТ${RESET}"
+    echo -e "${CYAN}  Основатель: Василиса Боровикова | Платформа: Vasilisa.luneville - вышивка от кутюр${RESET}"
+    echo -e "${CYAN}  Направления: 5 онлайн МК • Наставничество • Студия Мармарис • Арт-отпуска • Бутик${RESET}"
     echo -e "${CYAN}  Директория: ${SCRIPT_DIR}${RESET}"
     echo -e "${CYAN}${BOLD}===============================================================================${RESET}"
     echo ""
 }
 
-log_info() {
-    echo -e "${CYAN}[ИНФО]${RESET} $1"
-}
-
-log_success() {
-    echo -e "${GREEN}[УСПЕХ]${RESET} $1"
-}
-
-log_warn() {
-    echo -e "${YELLOW}[ВНИМАНИЕ]${RESET} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ОШИБКА]${RESET} $1"
-}
-
-log_step() {
-    echo -e "\n${MAGENTA}${BOLD}==>${RESET} ${BOLD}$1${RESET}"
-}
+log_info() { echo -e "${CYAN}[ИНФО]${RESET} $1"; }
+log_success() { echo -e "${GREEN}[УСПЕХ]${RESET} $1"; }
+log_warn() { echo -e "${YELLOW}[ВНИМАНИЕ]${RESET} $1"; }
+log_error() { echo -e "${RED}[ОШИБКА]${RESET} $1"; }
+log_step() { echo -e "\n${MAGENTA}${BOLD}==>${RESET} ${BOLD}$1${RESET}"; }
 
 check_prerequisites() {
-    log_step "Этап 1: Проверка окружения Node.js и npm"
+    log_step "Этап 1: Проверка окружения Node.js 18+ и npm"
     if ! command -v node >/dev/null 2>&1; then
         log_error "Node.js не установлен! Установите Node.js 18+ с https://nodejs.org/"
         exit 1
@@ -63,168 +52,60 @@ check_prerequisites() {
     log_success "npm обнаружен: v$(npm -v)"
 }
 
-setup_directories() {
-    log_step "Этап 2: Проверка и создание системных директорий"
-    DIRS=(".vscode" "scratch" "_BACKUPS" "public" "components" "utils" "pages")
-    for dir in "${DIRS[@]}"; do
-        if [ ! -d "$dir" ]; then
-            mkdir -p "$dir"
-            log_info "Создана папка: $dir"
-        fi
-    done
-    log_success "Файловая структура готова к работе."
-}
-
-setup_vscode_tasks() {
-    log_step "Этап 3: Конфигурация VS Code (.vscode/tasks.json)"
-    TASKS_FILE=".vscode/tasks.json"
-    cat << 'EOF' > "$TASKS_FILE"
-{
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "1. Запуск Сервера Разработки (Dev: Port 3000)",
-      "type": "shell",
-      "command": "npm run dev",
-      "isBackground": true,
-      "problemMatcher": "$tsc-watch",
-      "group": { "kind": "build", "isDefault": true }
-    },
-    {
-      "label": "2. Сборка Проекта (Build Next.js)",
-      "type": "shell",
-      "command": "npm run build",
-      "problemMatcher": []
-    },
-    {
-      "label": "3. Запуск Продакшн Сервера (Start)",
-      "type": "shell",
-      "command": "npm start",
-      "problemMatcher": []
-    },
-    {
-      "label": "4. Синхронизация Контента (Google Sheets -> content.json)",
-      "type": "shell",
-      "command": "node scripts/sync-content.js",
-      "problemMatcher": []
-    },
-    {
-      "label": "5. Инициализация Структуры Google Sheets CRM",
-      "type": "shell",
-      "command": "node scripts/init-google-sheets.js",
-      "problemMatcher": []
-    }
-  ]
-}
-EOF
-    log_success "Файл .vscode/tasks.json успешно настроен."
+resolve_app_dir() {
+    if [ -f "$SCRIPT_DIR/package.json" ]; then
+        APP_DIR="$SCRIPT_DIR"
+    elif [ -d "$SCRIPT_DIR/vasilisa-luneville-couture-platform" ]; then
+        APP_DIR="$SCRIPT_DIR/vasilisa-luneville-couture-platform"
+    elif [ -d "$SCRIPT_DIR/../vasilisa-luneville-couture-platform" ]; then
+        APP_DIR="$(cd "$SCRIPT_DIR/../vasilisa-luneville-couture-platform" && pwd)"
+    elif [ -d "$SCRIPT_DIR/../../vasilisa-luneville-couture-platform" ]; then
+        APP_DIR="$(cd "$SCRIPT_DIR/../../vasilisa-luneville-couture-platform" && pwd)"
+    else
+        APP_DIR="$SCRIPT_DIR"
+    fi
+    cd "$APP_DIR" || exit 1
 }
 
 install_dependencies() {
-    log_step "Этап 4: Проверка npm зависимостей"
+    log_step "Этап 2: Проверка зависимостей проекта vasilisa-luneville-couture-platform"
     if [ ! -d "node_modules" ]; then
-        log_info "Установка npm пакетов..."
+        log_info "Установка пакетов через npm install..."
         npm install
-        log_success "Зависимости успешно установлены."
+        log_success "Зависимости успешно установлены!"
     else
-        log_success "Каталог node_modules уже существует."
-    fi
-}
-
-free_port() {
-    local port=${1:-3000}
-    log_info "Проверка доступности порта ${port}..."
-    if command -v netstat >/dev/null 2>&1; then
-        PID=$(netstat -ano 2>/dev/null | grep ":${port} " | grep "LISTENING" | awk '{print $5}' | head -n 1)
-        if [ -n "$PID" ] && [ "$PID" -ne 0 ]; then
-            log_warn "Порт ${port} занят процессом PID ${PID}. Выполняется освобождение..."
-            taskkill //F //PID "$PID" >/dev/null 2>&1 || true
-            sleep 1
-            log_success "Порт ${port} успешно освобожден."
-        else
-            log_success "Порт ${port} свободен."
-        fi
+        log_success "Каталог node_modules готов."
     fi
 }
 
 interactive_menu() {
     while true; do
         print_banner
-        echo -e "${BOLD}Выберите действие для запуска платформы:${RESET}"
-        echo -e "  ${GREEN}1)${RESET} Запустить сервер разработки (npm run dev -> http://localhost:3000)"
-        echo -e "  ${GREEN}2)${RESET} Собрать и запустить боевую версию (npm run build && npm start)"
-        echo -e "  ${GREEN}3)${RESET} Синхронизировать контент с Google Sheets (sync-content.js)"
-        echo -e "  ${GREEN}4)${RESET} Инициализировать таблицы CRM Google Sheets (init-google-sheets.js)"
-        echo -e "  ${GREEN}5)${RESET} Проверить и освободить порт 3000"
-        echo -e "  ${GREEN}6)${RESET} ⏸️ Перевести сайт в режим обслуживания (Vercel Pause)"
-        echo -e "  ${GREEN}7)${RESET} ▶️ Возобновить штатную работу сайта (Vercel Resume)"
-        echo -e "  ${RED}0)${RESET} Выход"
+        echo -e "${YELLOW}${BOLD}ВЫБЕРИТЕ ДЕЙСТВИЕ ДЛЯ ПЛАТФОРМЫ VASILISA.LUNEVILLE:${RESET}"
+        echo -e "  ${GREEN}${BOLD}[1]${RESET} 🚀 Запустить сервер разработки Next.js [Порт 3000]"
+        echo -e "  ${GREEN}${BOLD}[2]${RESET} 📦 Собрать и запустить продакшн версию [npm run build && npm start]"
+        echo -e "  ${GREEN}${BOLD}[3]${RESET} 📊 Синхронизировать контент с Google Sheets [sync-content.js]"
+        echo -e "  ${GREEN}${BOLD}[4]${RESET} 💾 Зафиксировать таблицы как эталон SSOT [save-master-seed.js]"
+        echo -e "  ${GREEN}${BOLD}[5]${RESET} 🏛️ Инициализировать 15 листов CRM [init-google-sheets.js]"
+        echo -e "  ${GREEN}${BOLD}[6]${RESET} 🛠️ Восстановить листы из эталона [restore-sheets.js]"
+        echo -e "  ${RED}${BOLD}[0]${RESET} ❌ Выход"
         echo ""
-        read -r -p "Введите номер команды (0-7): " CHOICE
-
-        case "$CHOICE" in
-            1)
-                free_port 3000
-                log_info "Запуск dev-сервера на http://localhost:3000..."
-                npm run dev
-                ;;
-            2)
-                free_port 3000
-                log_info "Сборка и старт Next.js..."
-                npm run build && npm start
-                ;;
-            3)
-                log_info "Синхронизация с Google Sheets..."
-                node scripts/sync-content.js
-                read -r -p "Нажмите Enter для возврата в меню..."
-                ;;
-            4)
-                log_info "Инициализация таблиц Google Sheets..."
-                node scripts/init-google-sheets.js
-                read -r -p "Нажмите Enter для возврата в меню..."
-                ;;
-            5)
-                free_port 3000
-                read -r -p "Нажмите Enter для возврата в меню..."
-                ;;
-            6)
-                bash "160519092026 Исторические скрипты запуска корня/pause-site.sh"
-                read -r -p "Нажмите Enter для возврата в меню..."
-                ;;
-            7)
-                bash "160519092026 Исторические скрипты запуска корня/resume-site.sh"
-                read -r -p "Нажмите Enter для возврата в меню..."
-                ;;
-            0)
-                echo -e "\n${GREEN}Работа завершена.${RESET}"
-                exit 0
-                ;;
-            *)
-                log_warn "Неверный ввод. Пожалуйста, укажите цифру от 0 до 7."
-                sleep 1
-                ;;
+        read -rp "Введите номер команды [0-6]: " choice
+        case "$choice" in
+            1) npm run dev; break ;;
+            2) npm run build && npm start; break ;;
+            3) node scripts/sync-content.js; read -rp "Нажмите ENTER..." ;;
+            4) node scripts/save-master-seed.js; read -rp "Нажмите ENTER..." ;;
+            5) node scripts/init-google-sheets.js; read -rp "Нажмите ENTER..." ;;
+            6) node scripts/restore-sheets.js; read -rp "Нажмите ENTER..." ;;
+            0) exit 0 ;;
+            *) sleep 1 ;;
         esac
     done
 }
 
-# Выполнение шагов развертывания
 print_banner
 check_prerequisites
-setup_directories
-setup_vscode_tasks
+resolve_app_dir
 install_dependencies
-free_port 3000
-
-# Если переданы аргументы CLI, запускаем конкретную задачу, иначе интерактивное меню
-if [ "$1" == "--dev" ]; then
-    npm run dev
-elif [ "$1" == "--build" ]; then
-    npm run build
-elif [ "$1" == "--sync" ]; then
-    node scripts/sync-content.js
-elif [ "$1" == "--init" ]; then
-    node scripts/init-google-sheets.js
-else
-    interactive_menu
-fi
-
+interactive_menu
