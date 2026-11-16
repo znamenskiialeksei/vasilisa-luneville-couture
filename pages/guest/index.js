@@ -1,0 +1,464 @@
+// ==============================================================================
+// ЛИЧНЫЙ КАБИНЕТ ПУТЕШЕСТВЕННИКА [TRAVELER DASHBOARD]
+// Файл: pages/guest/index.js
+// Назначение: Управление бронированиями гостя, прямой чат с хозяином, видео-гиды
+// Редакция: 28.09.2026 08:00 | Метка: TAG: VILLA-GUEST-CHANNEL-SYNC-280920260800
+// ==============================================================================
+
+import React, { useState, useEffect, useRef } from 'react';
+import Head from 'next/head';
+import { useRouter } from 'next/router';
+import Link from 'next/link';
+import axios from 'axios';
+import { Compass, MessageCircle, Calendar, Sparkles, User, Shield, ArrowLeft, CheckCircle2, Mail, Phone } from 'lucide-react';
+import Navbar from '../../components/Navbar';
+import Footer from '../../components/Footer';
+import GuestBookings from '../../components/GuestCabinet/GuestBookings';
+import GuestChat from '../../components/GuestCabinet/GuestChat';
+import GuestGuides from '../../components/GuestCabinet/GuestGuides';
+import GuestProfile from '../../components/GuestCabinet/GuestProfile';
+import AuthModal from '../../components/Modals/AuthModal';
+import ContactHostModal from '../../components/Modals/ContactHostModal';
+import VerificationModal from '../../components/Modals/VerificationModal';
+import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../utils/language';
+import { useToast } from '../../components/Toast';
+
+export default function GuestDashboard() {
+  const router = useRouter();
+  const { currentUser, authLoading, setAuthModalOpen, setContactModalOpen, updateCurrentUser, logout } = useAuth();
+  const { t, lang, currency } = useLanguage();
+  const toast = useToast();
+
+  const [activeTab, setActiveTab] = useState('trips'); // 'trips', 'chat', 'guides', 'profile'
+  const [activeRequests, setActiveRequests] = useState([]);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [channelUsed, setChannelUsed] = useState('channel_1_sheets_api');
+  const [timeLefter, setTimeLefter] = useState({});
+  const [loadingChat, setLoadingChat] = useState(false);
+  const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const isFetchingRef = useRef(false);
+
+  // Синхронизация активной вкладки с URL query [?tab=chat]
+  useEffect(() => {
+    if (router.query.tab && ['trips', 'chat', 'guides', 'profile'].includes(router.query.tab)) {
+      setActiveTab(router.query.tab);
+    }
+  }, [router.query.tab]);
+
+  // Загрузка локально сохраненных данных при монтировании для мгновенного рендера
+  useEffect(() => {
+    if (currentUser?.contact && typeof window !== 'undefined') {
+      try {
+        const savedMsgs = localStorage.getItem(`guest_chat_${currentUser.contact}`);
+        if (savedMsgs) {
+          const parsed = JSON.parse(savedMsgs);
+          if (Array.isArray(parsed) && parsed.length > 0) setChatMessages(parsed);
+        }
+        const savedReqs = localStorage.getItem(`guest_reqs_${currentUser.contact}`);
+        if (savedReqs) {
+          const parsed = JSON.parse(savedReqs);
+          if (Array.isArray(parsed) && parsed.length > 0) setActiveRequests(parsed);
+        }
+      } catch (e) { }
+    }
+  }, [currentUser?.contact]);
+
+  // Загрузка сообщений чата и активных заявок гостя с защитой от мерцания
+  const fetchGuestData = async () => {
+    if (!currentUser || isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    try {
+      const res = await axios.post('/api/booking', {
+        action: 'chat',
+        contact: currentUser.contact,
+        sender: currentUser.name
+      });
+      if (res.data && res.data.success) {
+        if (res.data.channelUsed) {
+          setChannelUsed(res.data.channelUsed);
+        }
+        // Защита от исчезновения данных: если сервер вернул непустой список сообщений, обновляем
+        if (Array.isArray(res.data.messages) && res.data.messages.length > 0) {
+          setChatMessages(res.data.messages);
+          if (typeof window !== 'undefined' && currentUser.contact) {
+            try {
+              localStorage.setItem(`guest_chat_${currentUser.contact}`, JSON.stringify(res.data.messages));
+            } catch (e) { }
+          }
+        }
+        // Защита активных заявок от временных сбоев API
+        if (Array.isArray(res.data.activeRequests) && res.data.activeRequests.length > 0) {
+          setActiveRequests(res.data.activeRequests);
+          if (typeof window !== 'undefined' && currentUser.contact) {
+            try {
+              localStorage.setItem(`guest_reqs_${currentUser.contact}`, JSON.stringify(res.data.activeRequests));
+            } catch (e) { }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Ошибка загрузки данных гостя:', err?.message || err);
+    } finally {
+      isFetchingRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchGuestData();
+      const interval = setInterval(fetchGuestData, 5000); // Опрос раз в 5 секунд
+      return () => clearInterval(interval);
+    }
+  }, [currentUser]);
+
+  // Таймер обратного отсчета для заявок в статусе "ОЖИДАЕТ ОПЛАТЫ" (24ч HOLD)
+  useEffect(() => {
+    const timerInterval = setInterval(() => {
+      const newTimes = {};
+      let changed = false;
+
+      activeRequests.forEach((req) => {
+        if (req.expiresAt && (req.status === 'ОЖИДАЕТ ОПЛАТЫ' || req.status === 'СПЕЦПРЕДЛОЖЕНИЕ')) {
+          const diff = new Date(req.expiresAt).getTime() - Date.now();
+          if (diff <= 0) {
+            newTimes[req.rowIndex] = 'EXPIRED';
+          } else {
+            const h = Math.floor(diff / (1000 * 60 * 60));
+            const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((diff % (1000 * 60)) / 1000);
+            newTimes[req.rowIndex] = `${h}ч ${m}м ${s}с`;
+          }
+          changed = true;
+        }
+      });
+
+      if (changed) setTimeLefter(newTimes);
+    }, 1000);
+
+    return () => clearInterval(timerInterval);
+  }, [activeRequests]);
+
+  // Отправка сообщения хозяину
+  const handleSendMessage = async (msgText, fileObj) => {
+    if (!currentUser) return;
+    setLoadingChat(true);
+
+    const tempMsg = {
+      date: new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' }),
+      sender: currentUser.name,
+      original: msgText,
+      ru: msgText,
+      en: msgText,
+      tr: msgText,
+      file: fileObj?.name || ''
+    };
+    setChatMessages((prev) => [...prev, tempMsg]);
+
+    try {
+      const res = await axios.post('/api/booking', {
+        action: 'chat',
+        contact: currentUser.contact,
+        sender: currentUser.name,
+        message: msgText,
+        fileBase64: fileObj?.base64 || null,
+        fileName: fileObj?.name || null,
+        mimeType: fileObj?.type || null
+      });
+
+      if (res.data && res.data.success) {
+        if (res.data.channelUsed) {
+          setChannelUsed(res.data.channelUsed);
+        }
+        if (res.data.messages && res.data.messages.length > 0) {
+          setChatMessages(res.data.messages);
+        }
+        toast.success('Сообщение отправлено хозяину.');
+      } else {
+        toast.error('Не удалось отправить сообщение.');
+      }
+    } catch (err) {
+      toast.error('Сетевая ошибка при отправке сообщения.');
+    } finally {
+      setLoadingChat(false);
+    }
+  };
+
+  // Переход к оплате одобренной заявки или спецпредложения
+  const handlePayRequest = async (req) => {
+    try {
+      const priceNum = parseInt(String(req.price).replace(/[^\d]/g, ''), 10) || 250;
+      const effectiveCurrency = String(req.price).includes('RUB') || String(req.price).includes('₽') ? 'RUB' : (String(req.price).includes('USD') || String(req.price).includes('$') ? 'USD' : (currency || 'USD'));
+      const paymentGateway = effectiveCurrency === 'RUB' ? 'tbank' : 'stripe';
+
+      const res = await axios.post('/api/payment', {
+        gateway: paymentGateway,
+        amount: priceNum,
+        currency: effectiveCurrency,
+        origin: typeof window !== 'undefined' ? window.location.origin : '',
+        bookingDetails: {
+          action: 'booking',
+          isRegistered: true,
+          name: currentUser.name,
+          contact: currentUser.contact,
+          checkIn: req.checkIn,
+          checkOut: req.checkOut,
+          nights: req.nights,
+          total_guests: req.guests,
+          totalPrice: req.price
+        }
+      });
+
+      if (res.data && res.data.url) {
+        window.location.href = res.data.url;
+      } else {
+        toast.info('Тестовый режим оплаты: статус успешно подтвержден!');
+      }
+    } catch (err) {
+      toast.error('Ошибка инициализации шлюза оплаты.');
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-200">
+      <Head>
+        <title>{t('travelerHubTitle')} | Vasilisa.luneville - вышивка от кутюр</title>
+      </Head>
+
+      <Navbar />
+
+      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+        
+        {/* Верхняя панель навигации кабинета */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+          <div>
+            <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
+              <Link href="/" className="hover:text-white flex items-center gap-1">
+                <ArrowLeft className="w-3.5 h-3.5" /> На главную виллы
+              </Link>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              Личный кабинет
+            </h1>
+            {currentUser && (
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <span className="text-sm text-slate-300 font-medium">
+                  Имя гостя: <b className="text-white font-bold">{currentUser.name || 'Гость'}</b>
+                </span>
+                {currentUser.emailVerified ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-semibold">
+                    <CheckCircle2 className="w-3 h-3" />
+                    {t('emailVerifiedBadge') || 'Email подтвержден'}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsEmailModalOpen(true)}
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-[11px] font-semibold transition-colors"
+                  >
+                    <Mail className="w-3 h-3" />
+                    {currentUser.email ? (t('verifyEmailPrompt') || 'Подтвердить Email') : 'Указать и подтвердить Email'}
+                  </button>
+                )}
+                {currentUser.phoneVerified ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-semibold">
+                    <CheckCircle2 className="w-3 h-3" />
+                    {t('phoneVerifiedBadge') || 'Телефон подтвержден'}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsPhoneModalOpen(true)}
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-[11px] font-semibold transition-colors"
+                  >
+                    <Phone className="w-3 h-3" />
+                    {currentUser.phone ? (t('verifyPhonePrompt') || 'Подтвердить телефон') : 'Указать и подтвердить телефон'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {currentUser?.isHost && (
+            <Link
+              href="/host"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all"
+            >
+              <Shield className="w-4 h-4" /> Перейти в панель управления хозяина
+            </Link>
+          )}
+        </div>
+
+        {/* Проверка авторизации */}
+        {!currentUser && !authLoading ? (
+          <div className="bg-slate-900 border border-white/10 rounded-3xl p-10 text-center max-w-md mx-auto my-12 shadow-2xl">
+            <User className="w-12 h-12 text-rose-500 mx-auto mb-3" />
+            <h3 className="text-lg font-bold text-white mb-2">Требуется авторизация</h3>
+            <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+              Войдите или зарегистрируйтесь, чтобы просматривать детали своих бронирований и общаться с владельцем виллы.
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={() => setContactModalOpen(true)}
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-bold text-xs sm:text-sm shadow-lg shadow-rose-500/30 transition-all flex items-center justify-center gap-2"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>{t('writeDirectlyBtn') || 'Написать хозяину без регистрации'}</span>
+              </button>
+
+              <button
+                onClick={() => setAuthModalOpen(true)}
+                className="w-full py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-semibold text-xs sm:text-sm border border-white/10 transition-all flex items-center justify-center gap-2"
+              >
+                <User className="w-4 h-4" />
+                <span>Войти по логину и паролю</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            {/* Меню табов личного кабинета */}
+            <div className="flex flex-wrap gap-2 border-b border-white/10 pb-4 mb-8">
+              <button
+                onClick={() => setActiveTab('trips')}
+                className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs sm:text-sm font-bold transition-all ${
+                  activeTab === 'trips'
+                    ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/25'
+                    : 'bg-slate-900 text-slate-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <span>{t('tabMyTrips')}</span>
+                {activeRequests.length > 0 && (
+                  <span className="w-5 h-5 rounded-full bg-white text-rose-600 text-[10px] font-black flex items-center justify-center">
+                    {activeRequests.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab('chat')}
+                className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs sm:text-sm font-bold transition-all ${
+                  activeTab === 'chat'
+                    ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/25'
+                    : 'bg-slate-900 text-slate-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>{t('tabHostChat')}</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('guides')}
+                className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs sm:text-sm font-bold transition-all ${
+                  activeTab === 'guides'
+                    ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/25'
+                    : 'bg-slate-900 text-slate-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>{t('tabMyGuides')}</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs sm:text-sm font-bold transition-all ${
+                  activeTab === 'profile'
+                    ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/25'
+                    : 'bg-slate-900 text-slate-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <User className="w-4 h-4" />
+                <span>{t('tabProfile')}</span>
+              </button>
+            </div>
+
+            {/* Контент активного таба */}
+            {activeTab === 'trips' && (
+              <GuestBookings
+                activeRequests={activeRequests}
+                timeLefter={timeLefter}
+                onPayRequest={handlePayRequest}
+              />
+            )}
+
+            {activeTab === 'chat' && (
+              <GuestChat
+                messages={chatMessages}
+                channelUsed={channelUsed}
+                onSendMessage={handleSendMessage}
+                loading={loadingChat}
+                activeRequests={activeRequests}
+                timeLefter={timeLefter}
+                onPayRequest={handlePayRequest}
+              />
+            )}
+
+            {activeTab === 'guides' && (
+              <GuestGuides />
+            )}
+
+            {activeTab === 'profile' && (
+              <GuestProfile />
+            )}
+          </div>
+        )}
+
+      </main>
+
+      {/* Модальное окно подтверждения Email гостя */}
+      {currentUser && (
+        <VerificationModal
+          isOpen={isEmailModalOpen}
+          onClose={() => setIsEmailModalOpen(false)}
+          targetChannel="email"
+          guestData={{
+            name: currentUser.name || 'Гость',
+            email: currentUser.email || (currentUser.contact?.includes('@') ? currentUser.contact : ''),
+            phone: currentUser.phone || ''
+          }}
+          onSuccess={(res) => {
+            setIsEmailModalOpen(false);
+            if (updateCurrentUser) {
+              updateCurrentUser({
+                emailVerified: true,
+                email: res.email || currentUser.email
+              });
+            }
+            toast.success(t('verifySuccess') || 'Email успешно подтвержден!');
+          }}
+        />
+      )}
+
+      {/* Модальное окно подтверждения номера телефона гостя */}
+      {currentUser && (
+        <VerificationModal
+          isOpen={isPhoneModalOpen}
+          onClose={() => setIsPhoneModalOpen(false)}
+          targetChannel="phone"
+          guestData={{
+            name: currentUser.name || 'Гость',
+            email: currentUser.email || '',
+            phone: currentUser.phone || (!currentUser.contact?.includes('@') ? currentUser.contact : '')
+          }}
+          onSuccess={(res) => {
+            setIsPhoneModalOpen(false);
+            if (updateCurrentUser) {
+              updateCurrentUser({
+                phoneVerified: true,
+                phone: res.phone || currentUser.phone
+              });
+            }
+            toast.success(t('verifySuccess') || 'Номер телефона успешно подтвержден!');
+          }}
+        />
+      )}
+
+      <Footer />
+      <AuthModal />
+      <ContactHostModal />
+    </div>
+  );
+}
+

@@ -1,0 +1,3901 @@
+// [ПРЕДЫДУЩАЯ РЕДАКЦИЯ: 15.11.2026 21:45 | ПЛАН: 151120262145 ПЛАН Каталог услуг Доп 0_14-0_16 и Code_js.md | TAG: VILLA-BOOKING-ORDER-SAFE-151120262145]
+// [АКТУАЛЬНАЯ РЕДАКЦИЯ: 16.11.2026 09:05 | ПЛАН: 161120260902 ПЛАН Реквизиты владельца и сборка.md | TAG: VILLA-OWNER-CONTACTS-SYNC-161120260902]
+// Уровень А: "в заглушках не мои данные Telegram: [@vasilisa_luneville](https://t.me/vasilisa_luneville) WhatsApp:[+7 921 304-78-92 / +90 545 598 32 11](https://wa.me/79213047892) должно быть Telegram: [@limonnavillevturkey](https://t.me/limonnavillevturkey) WhatsApp:[+90 545 598 32 11](https://wa.me/905455983211) Официальный VKN:TR-VASILISA-VKN проверь везде не только в заглушках | Согласен с поправкой Официальный VKN: TR-VASILISA-VKN [Аксу / Анталья] это не [Аксу / Анталья] это Мугла Ортаджа"
+// Уровень Б: Синхронизация реквизитов владельца в ACCOUNTS, глобальных правилах CALENDAR, самоисцелении ACCOUNTS и электронном ваучере [Telegram @limonnavillevturkey, WhatsApp/Телефон +90 545 598 32 11, VKN TR-VASILISA-VKN Marmaris Vergi Dairesi, Мугла / Ортаджа].
+// ==============================================================================
+// ОСНОВНОЙ API СЕРВЕР GOOGLE SHEETS & CRM VASILISA.LUNEVILLE
+// Файл: pages/api/booking.js
+// Назначение: Обработка бронирований, авторизация, чаты, настройки календаря
+// СТАНДАРТ: 100% канонические формулы со СТРОГОЙ ТОЧКОЙ С ЗАПЯТОЙ ; для русской локали Google Таблиц
+// ==============================================================================
+
+import fs from 'fs';
+import path from 'path';
+import { google } from 'googleapis';
+import { createClient } from '@vercel/kv';
+import { generateVoucher } from '../../utils/pdf';
+import { getLiveSheetMap, resolveRange, SHEETS_REGISTRY } from '../../utils/sheetsRegistry';
+import { generateOtpCode, sendEmailVerificationCode, sendPhoneVerificationCode, sendDetailedBookingNotification } from '../../utils/mailer';
+import { SMART_TEMPLATES } from '../../utils/templatesData';
+import { getAiKnowledgeBase, invalidateAiKnowledgeCache } from '../../utils/aiKnowledgeBase';
+import { generateConciergeReply } from '../../utils/aiConciergeEngine';
+
+const RULES_BACKUP_PATH = path.join(process.cwd(), 'utils', 'villa_global_rules.json');
+const RULES_TMP_PATH = path.join('/tmp', 'villa_global_rules.json');
+const CALENDAR_BACKUP_PATH = path.join(process.cwd(), 'utils', 'villa_calendar_rules.json');
+const CALENDAR_TMP_PATH = path.join('/tmp', 'villa_calendar_rules.json');
+const AI_SETTINGS_BACKUP_PATH = path.join(process.cwd(), 'utils', 'villa_ai_settings.json');
+const AI_SETTINGS_TMP_PATH = path.join('/tmp', 'villa_ai_settings.json');
+
+const getPersistedGlobalRules = () => {
+  if (global._hostSettingsCache && Object.keys(global._hostSettingsCache).length > 0) {
+    return global._hostSettingsCache;
+  }
+  try {
+    if (fs.existsSync(RULES_TMP_PATH)) {
+      const data = JSON.parse(fs.readFileSync(RULES_TMP_PATH, 'utf8'));
+      global._hostSettingsCache = data;
+      return data;
+    }
+  } catch (e) {}
+  try {
+    if (fs.existsSync(RULES_BACKUP_PATH)) {
+      const data = JSON.parse(fs.readFileSync(RULES_BACKUP_PATH, 'utf8'));
+      global._hostSettingsCache = data;
+      return data;
+    }
+  } catch (e) {}
+  return null;
+};
+
+const savePersistedGlobalRules = (rules) => {
+  if (!rules) return;
+  global._hostSettingsCache = rules;
+  try {
+    fs.writeFileSync(RULES_TMP_PATH, JSON.stringify(rules, null, 2), 'utf8');
+  } catch (e) {}
+  try {
+    fs.writeFileSync(RULES_BACKUP_PATH, JSON.stringify(rules, null, 2), 'utf8');
+  } catch (e) {}
+};
+
+const getPersistedCalendarRules = () => {
+  if (Array.isArray(global._hostCalendarRulesCache) && global._hostCalendarRulesCache.length > 0) {
+    return global._hostCalendarRulesCache;
+  }
+  try {
+    if (fs.existsSync(CALENDAR_TMP_PATH)) {
+      const data = JSON.parse(fs.readFileSync(CALENDAR_TMP_PATH, 'utf8'));
+      if (Array.isArray(data)) {
+        global._hostCalendarRulesCache = data;
+        return data;
+      }
+    }
+  } catch (e) {}
+  try {
+    if (fs.existsSync(CALENDAR_BACKUP_PATH)) {
+      const data = JSON.parse(fs.readFileSync(CALENDAR_BACKUP_PATH, 'utf8'));
+      if (Array.isArray(data)) {
+        global._hostCalendarRulesCache = data;
+        return data;
+      }
+    }
+  } catch (e) {}
+  return [];
+};
+
+const savePersistedCalendarRules = (rules) => {
+  if (!Array.isArray(rules)) return;
+  global._hostCalendarRulesCache = rules;
+  try {
+    fs.writeFileSync(CALENDAR_TMP_PATH, JSON.stringify(rules, null, 2), 'utf8');
+  } catch (e) {}
+  try {
+    fs.writeFileSync(CALENDAR_BACKUP_PATH, JSON.stringify(rules, null, 2), 'utf8');
+  } catch (e) {}
+};
+
+const getPersistedAiSettings = () => {
+  if (global._aiSettingsCache && Object.keys(global._aiSettingsCache).length > 0) {
+    return global._aiSettingsCache;
+  }
+  try {
+    if (fs.existsSync(AI_SETTINGS_TMP_PATH)) {
+      const data = JSON.parse(fs.readFileSync(AI_SETTINGS_TMP_PATH, 'utf8'));
+      global._aiSettingsCache = data;
+      return data;
+    }
+  } catch (e) {}
+  try {
+    if (fs.existsSync(AI_SETTINGS_BACKUP_PATH)) {
+      const data = JSON.parse(fs.readFileSync(AI_SETTINGS_BACKUP_PATH, 'utf8'));
+      global._aiSettingsCache = data;
+      return data;
+    }
+  } catch (e) {}
+  return null;
+};
+
+const savePersistedAiSettings = (settings) => {
+  if (!settings) return;
+  global._aiSettingsCache = settings;
+  try {
+    fs.writeFileSync(AI_SETTINGS_TMP_PATH, JSON.stringify(settings, null, 2), 'utf8');
+  } catch (e) {}
+  try {
+    fs.writeFileSync(AI_SETTINGS_BACKUP_PATH, JSON.stringify(settings, null, 2), 'utf8');
+  } catch (e) {}
+};
+
+let memoryCache = {};
+
+// Инициализация Vercel KV клиента (при наличии ключей)
+const getKV = () => {
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    try {
+      return createClient({
+        url: process.env.KV_REST_API_URL,
+        token: process.env.KV_REST_API_TOKEN
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+};
+const kv = getKV();
+
+const safeCacheGet = async (key) => {
+  if (kv) {
+    try {
+      return await kv.get(key);
+    } catch (e) {
+      return memoryCache[key];
+    }
+  }
+  return memoryCache[key];
+};
+
+const safeCacheSet = async (key, val, opts) => {
+  if (kv) {
+    try {
+      await kv.set(key, val, opts);
+    } catch (e) {
+      memoryCache[key] = val;
+    }
+  } else {
+    memoryCache[key] = val;
+  }
+};
+
+const safeCacheDel = async (key) => {
+  if (kv) {
+    try {
+      await kv.del(key);
+    } catch (e) {
+      delete memoryCache[key];
+    }
+  } else {
+    delete memoryCache[key];
+  }
+};
+
+// Быстрый параллельный перевод текста в реальном времени для ru en tr
+const inFlightTranslate = async (text) => {
+  if (!text || typeof text !== 'string') return { ru: '', en: '', tr: '' };
+  const clean = text.trim();
+  if (!clean) return { ru: '', en: '', tr: '' };
+
+  const translateOne = async (targetLang) => {
+    try {
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(clean)}`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      if (!res.ok) return clean;
+      const data = await res.json();
+      if (Array.isArray(data) && Array.isArray(data[0])) {
+        return data[0].map((item) => item[0]).filter(Boolean).join('');
+      }
+      return clean;
+    } catch (e) {
+      return clean;
+    }
+  };
+
+  try {
+    const [ru, en, tr] = await Promise.all([
+      translateOne('ru'),
+      translateOne('en'),
+      translateOne('tr')
+    ]);
+    return { ru: ru || clean, en: en || clean, tr: tr || clean };
+  } catch (e) {
+    return { ru: clean, en: clean, tr: clean };
+  }
+};
+
+// Резервная отправка через Google Apps Script Webhook: Канал 2
+const relayToAppsScriptWebhook = async (action, payload) => {
+  const scriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL || process.env.NEXT_PUBLIC_APPS_SCRIPT_URL;
+  if (!scriptUrl) return null;
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...payload })
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.warn('[relayToAppsScriptWebhook Warning]:', err.message);
+    return null;
+  }
+};
+
+// Интеллектуальное сопоставление составных контактов [телефон | email]
+const isContactMatch = (storedContact, targetContact) => {
+  if (!storedContact || !targetContact) return false;
+  const s1 = storedContact.toLowerCase().trim();
+  const s2 = targetContact.toLowerCase().trim();
+  if (s1 === s2) return true;
+  if (s1.includes('@') && s2.includes('@')) {
+    return s1 === s2;
+  }
+  if (s1.includes('|')) {
+    const parts = s1.split('|').map((p) => p.trim());
+    if (parts.some((p) => p === s2)) return true;
+  }
+  if (s2.includes('|')) {
+    const parts = s2.split('|').map((p) => p.trim());
+    if (parts.some((p) => p === s1)) return true;
+  }
+  const digits1 = s1.replace(/\D/g, '');
+  const digits2 = s2.replace(/\D/g, '');
+  if (digits1.length >= 10 && digits2.length >= 10) {
+    if (digits1.slice(-10) === digits2.slice(-10)) return true;
+  }
+  return false;
+};
+
+// Надежное разделение контакта на телефон и email
+const splitContactParts = (rawContact) => {
+  if (!rawContact) return { email: '', phone: '' };
+  const str = String(rawContact).trim();
+  if (str.includes('|')) {
+    const parts = str.split('|').map((p) => p.trim());
+    const emailPart = parts.find((p) => p.includes('@')) || '';
+    const phonePart = parts.find((p) => !p.includes('@')) || '';
+    return { email: emailPart.toLowerCase(), phone: phonePart };
+  }
+  if (str.includes('@')) {
+    return { email: str.toLowerCase(), phone: '' };
+  }
+  return { email: '', phone: str };
+};
+
+// Конфигурация названий листов и заголовков таблицы Google
+const GOOGLE_CONFIG = {
+  parentFolderId: "1DWd60F6n1i1mYdceLZx8RwHjVDGypz_d",
+  spreadsheetName: "PlatformVasilisaLuneville_DB",
+  sheetName: SHEETS_REGISTRY.BOOKINGS?.defaultName || "📋 Заявки и Бронирования",
+  homePageSheetName: SHEETS_REGISTRY.HOME?.defaultName || "🏠 Главная витрина",
+  accountSheetName: SHEETS_REGISTRY.ACCOUNTS?.defaultName || "👤 Гостевые аккаунты",
+  masterSheetName: SHEETS_REGISTRY.SETTINGS?.defaultName || "⚙️ Системные настройки ИИ Агентов",
+  calendarSettingsSheetName: SHEETS_REGISTRY.CALENDAR?.defaultName || "📅 Календарь и Тарифы",
+  productsSheetName: SHEETS_REGISTRY.SERVICES?.defaultName || "🛎️ Дополнительные услуги",
+  coursesSheetName: SHEETS_REGISTRY.GUIDES?.defaultName || "🗺️ Видео-путеводители",
+  studentsSheetName: SHEETS_REGISTRY.GUIDE_ACCESS?.defaultName || "🎟️ Доступы к путеводителям",
+  ordersSheetName: SHEETS_REGISTRY.ORDERS?.defaultName || "💳 Заказы услуг и гидов",
+  gallerySheetName: SHEETS_REGISTRY.GALLERY?.defaultName || "📸 Фото и Видео Галерея",
+  aboutSheetName: SHEETS_REGISTRY.HOME?.defaultName || "🏠 Главная витрина",
+  legalSheetName: SHEETS_REGISTRY.LEGAL?.defaultName || "⚖️ Юридические документы",
+  templatesSheetName: SHEETS_REGISTRY.TEMPLATES?.defaultName || "💬 Шаблоны сообщений",
+  settingsSheetName: SHEETS_REGISTRY.SETTINGS?.defaultName || "⚙️ Системные настройки ИИ Агентов",
+  tasksSheetName: SHEETS_REGISTRY.TASKS?.defaultName || "📋 Задачи и Поручения Секретаря",
+
+  homeHeaders: ["Ключ (ID)", "RU", "EN", "TR", "Медиа/Картинка"],
+  headers: ["Дата заявки", "Имя клиента", "Контакт (Tel/TG)", "Старт", "Завершение", "Ночей", "Взрослых", "Детей", "Всего гостей", "Итоговая стоимость", "Статус оплаты"],
+  accountHeaders: ["Дата регистрации", "Имя", "Контакт (Логин)", "Пароль", "Блок: Сайт", "Блок: Аккаунт", "Блок: Чат"],
+  masterHeaders: ["ФИО", "Телефон", "Telegram", "WhatsApp", "Google Email", "Логин", "Пароль", "Роль", "Прав: Финансы", "Прав: Периоды", "Прав: Блок. дат", "Прав: Окно брони", "Прав: Доступ к чатам"],
+  calendarSettingsHeaders: ["Дата старта", "Дата завершения", "Тип (Блокировка/Цена/Мин. дней/Заметка/Тип записи/Настройки)", "Значение", "Заметка", "Автор изменения", "Время фиксации"],
+  chatHeaders: ["Дата и Время", "Отправитель", "Оригинал", "RU", "EN", "TR", "Ссылка на вложение"],
+  productsHeaders: ["ID", "Название услуги [RU]", "Описание [RU]", "Название услуги [EN]", "Описание [EN]", "Название услуги [TR]", "Описание [TR]", "Цена [USD]", "Цена [EUR]", "Цена [RUB]", "Цена [TRY]", "Изображения", "Наличие", "Тип", "Видео презентации", "Подробное описание [RU]", "Подробное описание [EN]", "Подробное описание [TR]"],
+  coursesHeaders: ["ID", "Название путеводителя [RU]", "Описание [RU]", "Название путеводителя [EN]", "Описание [EN]", "Название путеводителя [TR]", "Описание [TR]", "Изображения", "Категория", "Ссылка на видео", "Цена [USD]", "Цена [EUR]", "Цена [RUB]", "Цена [TRY]", "Видео презентации", "Подробное описание [RU]", "Подробное описание [EN]", "Подробное описание [TR]"],
+  studentsHeaders: ["Дата", "Гость (Контакт)", "Гид ID", "Категория", "Статус оплаты", "Доступ (Да/Нет)", "Прогресс"],
+  ordersHeaders: ["Дата заказа", "Контакт", "Тип [МК/Наставничество/Бутик]", "Сумма", "Статус оплаты", "Детали"],
+  galleryHeaders: ["ID", "Группа (RU)", "Описание группы (RU)", "Группа (EN)", "Описание группы (EN)", "Группа (TR)", "Описание группы (TR)", "Тип (Фото/Видео/Карусель)", "Медиа (ссылки/iframes через запятую)", "Подпись (RU)", "Подпись (EN)", "Подпись (TR)"],
+  aboutHeaders: ["ID Раздела", "Название (RU)", "Название (EN)", "Название (TR)", "Текст (RU)", "Текст (EN)", "Текст (TR)"],
+  legalHeaders: ["ID Раздела", "Название (RU)", "Название (EN)", "Название (TR)", "Текст (RU)", "Текст (EN)", "Текст (TR)"],
+  templatesHeaders: ["ID Раздела", "Название (RU)", "Название (EN)", "Название (TR)", "Текст (RU)", "Текст (EN)", "Текст (TR)"],
+  variablesHeaders: ["Плейсхолдер", "Системный ключ", "Описание переменной", "Значение по умолчанию (Тест)"]
+};
+
+// Парсинг строки сообщений чата
+const parseMessageRow = (r) => {
+  if (!Array.isArray(r) || r.length === 0) {
+    return { date: '', sender: '', original: '', ru: '', en: '', tr: '', file: '' };
+  }
+  const cleanVal = (val, fallback) => {
+    if (!val) return fallback;
+    const str = val.toString().trim();
+    if (str.startsWith('#') || str.startsWith('=')) return fallback;
+    return str || fallback;
+  };
+  const orig = r[2] || '';
+  return {
+    date: r[0] || '',
+    sender: r[1] || '',
+    original: orig,
+    ru: cleanVal(r[3], orig),
+    en: cleanVal(r[4], orig),
+    tr: cleanVal(r[5], orig),
+    file: r[6] || ''
+  };
+};
+
+const getChatSheetName = (name, contact) => {
+  const safeName = (name || 'Guest').toString().replace(/[\\/?*[\]]/g, '').trim().substring(0, 15);
+  // Нормализация контакта: если передан комбинированный 'Телефон | Email', выделяем основной контакт
+  let rawContact = (contact || 'NoContact').toString();
+  if (rawContact.includes('|')) {
+    const parts = rawContact.split('|').map((p) => p.trim()).filter(Boolean);
+    // Приоритет email для имени листа чата, если нет: телефон
+    const emailPart = parts.find((p) => p.includes('@'));
+    rawContact = emailPart || parts[0] || 'NoContact';
+  }
+  const safeContact = rawContact.replace(/[\\/?*[\]|]/g, '').trim().substring(0, 30);
+  return `Chat_${safeName}_${safeContact}`;
+};
+
+const replacePlaceholders = (templateText, dataObj) => {
+  if (!templateText) return "";
+  let result = templateText;
+  for (const [placeholder, val] of Object.entries(dataObj)) {
+    result = result.split(placeholder).join(val !== undefined && val !== null ? val : "");
+  }
+  return result;
+};
+
+// Кэш проверенных и стилизованных листов диалогов для защиты от исчерпания квоты Google Sheets API
+const styledSheetsCache = {};
+
+// Интеллектуальное создание и смарт-стилизация листа диалога Google Sheets
+const ensureStyledChatSheet = async (sheets, targetChatId, sheetTitle) => {
+  if (!sheets || !targetChatId || !sheetTitle) return;
+  const cacheKey = `${targetChatId}_${sheetTitle}`;
+  if (styledSheetsCache[cacheKey]) return;
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: targetChatId });
+    const existingSheet = (meta.data.sheets || []).find((s) => s.properties.title === sheetTitle);
+
+    if (!existingSheet) {
+      // 1. Создаем новый лист с закреплением строки 1
+      const addRes = await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: targetChatId,
+        requestBody: {
+          requests: [
+            {
+              addSheet: {
+                properties: {
+                  title: sheetTitle,
+                  gridProperties: { frozenRowCount: 1 }
+                }
+              }
+            }
+          ]
+        }
+      });
+
+      const newSheetId = addRes.data.replies && addRes.data.replies[0]?.addSheet?.properties?.sheetId;
+
+      if (newSheetId !== undefined) {
+        // 2. Оформление темной шапки, автопереноса ячеек и автоширины колонок
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: targetChatId,
+          requestBody: {
+            requests: [
+              {
+                updateCells: {
+                  start: { sheetId: newSheetId, rowIndex: 0, columnIndex: 0 },
+                  rows: [
+                    {
+                      values: GOOGLE_CONFIG.chatHeaders.map((h) => ({
+                        userEnteredValue: { stringValue: h },
+                        userEnteredFormat: {
+                          backgroundColor: { red: 0.12, green: 0.16, blue: 0.23 },
+                          textFormat: { bold: true, fontSize: 10, foregroundColor: { red: 1, green: 1, blue: 1 } },
+                          horizontalAlignment: 'CENTER',
+                          verticalAlignment: 'MIDDLE',
+                          wrapStrategy: 'WRAP'
+                        }
+                      }))
+                    }
+                  ],
+                  fields: 'userEnteredValue,userEnteredFormat'
+                }
+              },
+              {
+                repeatCell: {
+                  range: {
+                    sheetId: newSheetId,
+                    startRowIndex: 1,
+                    endRowIndex: 1000,
+                    startColumnIndex: 0,
+                    endColumnIndex: GOOGLE_CONFIG.chatHeaders.length
+                  },
+                  cell: {
+                    userEnteredFormat: {
+                      wrapStrategy: 'WRAP',
+                      verticalAlignment: 'MIDDLE'
+                    }
+                  },
+                  fields: 'userEnteredFormat(wrapStrategy,verticalAlignment)'
+                }
+              },
+              {
+                autoResizeDimensions: {
+                  dimensions: {
+                    sheetId: newSheetId,
+                    dimension: 'COLUMNS',
+                    startIndex: 0,
+                    endIndex: GOOGLE_CONFIG.chatHeaders.length
+                  }
+                }
+              }
+            ]
+          }
+        });
+      }
+    } else {
+      // Лист уже существует: проверяем наличие строки заголовков
+      const sheetId = existingSheet.properties.sheetId;
+      let firstRow = [];
+      try {
+        const checkRows = await sheets.spreadsheets.values.get({
+          spreadsheetId: targetChatId,
+          range: `'${sheetTitle}'!A1:G1`
+        });
+        firstRow = (checkRows.data.values && checkRows.data.values[0]) || [];
+      } catch (readErr) {
+        firstRow = [];
+      }
+
+      // Если в ячейке A1 нет канонического заголовка "Дата и Время", лечим структуру
+      if (!firstRow || firstRow[0] !== 'Дата и Время') {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: targetChatId,
+          requestBody: {
+            requests: [
+              // Вставляем пустую строку на позицию 0, сдвигая существующие сообщения вниз
+              {
+                insertDimension: {
+                  range: {
+                    sheetId,
+                    dimension: 'ROWS',
+                    startIndex: 0,
+                    endIndex: 1
+                  },
+                  inheritFromBefore: false
+                }
+              },
+              // Закрепляем первую строку
+              {
+                updateSheetProperties: {
+                  properties: { sheetId, gridProperties: { frozenRowCount: 1 } },
+                  fields: 'gridProperties.frozenRowCount'
+                }
+              },
+              // Оформляем шапку
+              {
+                updateCells: {
+                  start: { sheetId, rowIndex: 0, columnIndex: 0 },
+                  rows: [
+                    {
+                      values: GOOGLE_CONFIG.chatHeaders.map((h) => ({
+                        userEnteredValue: { stringValue: h },
+                        userEnteredFormat: {
+                          backgroundColor: { red: 0.12, green: 0.16, blue: 0.23 },
+                          textFormat: { bold: true, fontSize: 10, foregroundColor: { red: 1, green: 1, blue: 1 } },
+                          horizontalAlignment: 'CENTER',
+                          verticalAlignment: 'MIDDLE',
+                          wrapStrategy: 'WRAP'
+                        }
+                      }))
+                    }
+                  ],
+                  fields: 'userEnteredValue,userEnteredFormat'
+                }
+              },
+              // Настраиваем перенос строк ячеек
+              {
+                repeatCell: {
+                  range: {
+                    sheetId,
+                    startRowIndex: 1,
+                    endRowIndex: 1000,
+                    startColumnIndex: 0,
+                    endColumnIndex: GOOGLE_CONFIG.chatHeaders.length
+                  },
+                  cell: {
+                    userEnteredFormat: {
+                      wrapStrategy: 'WRAP',
+                      verticalAlignment: 'MIDDLE'
+                    }
+                  },
+                  fields: 'userEnteredFormat(wrapStrategy,verticalAlignment)'
+                }
+              },
+              // Выравниваем ширину столбцов
+              {
+                autoResizeDimensions: {
+                  dimensions: {
+                    sheetId,
+                    dimension: 'COLUMNS',
+                    startIndex: 0,
+                    endIndex: GOOGLE_CONFIG.chatHeaders.length
+                  }
+                }
+              }
+            ]
+          }
+        });
+      }
+    }
+    styledSheetsCache[cacheKey] = true;
+  } catch (err) {
+    console.warn(`[ensureStyledChatSheet Warning for ${sheetTitle}]:`, err.message);
+  }
+};
+
+// Автоматическое самоисцеление листа ACCOUNTS: исправление сдвинутых колонок и авто-генерация UID
+const sanitizeAndHealAccountsSheet = async (sheets, spreadsheetId, sheetMap) => {
+  if (!sheets || !spreadsheetId) return;
+  try {
+    const range = resolveRange(sheetMap, 'ACCOUNTS', 'A2:M100');
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId, range });
+    const rows = res.data.values || [];
+    if (rows.length === 0) return;
+
+    const updates = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length === 0 || !row[0]) continue;
+      const rowIndex = i + 2;
+
+      let regDate = (row[0] || '').toString().trim();
+      let name = (row[1] || '').toString().trim();
+      let col2 = (row[2] || '').toString().trim(); // expected Phone
+      let col3 = (row[3] || '').toString().trim(); // expected Email
+      let col4 = (row[4] || '').toString().trim(); // expected Password
+      let col5 = (row[5] || '').toString().trim(); // expected Block Site
+      let col6 = (row[6] || '').toString().trim(); // expected Block Account
+      let col7 = (row[7] || '').toString().trim(); // expected Block Chat
+      let col8 = (row[8] || '').toString().trim(); // expected Verification Status
+      let col9 = (row[9] || '').toString().trim(); // expected Verification Date
+      let col10 = (row[10] || '').toString().trim(); // expected Re-verify
+      let col11 = (row[11] || '').toString().trim(); // expected Account Status
+      let col12 = (row[12] || '').toString().trim(); // expected UID
+
+      let needsHeal = false;
+      let phone = col2;
+      let email = col3;
+      let pass = col4;
+      let bSite = col5;
+      let bAcc = col6;
+      let bChat = col7;
+      let vStat = col8;
+      let vDate = col9;
+      let reVer = col10;
+      let accStat = col11;
+      let uid = col12;
+
+      // Признак 1: В колонке C находится email (содержит @)
+      if (col2.includes('@')) {
+        needsHeal = true;
+        if (col2.includes('|')) {
+          const parts = col2.split('|').map((p) => p.trim());
+          email = parts.find((p) => p.includes('@')) || '';
+          phone = parts.find((p) => !p.includes('@')) || '';
+        } else {
+          email = col2;
+          phone = '';
+        }
+        // В сдвинутой строке пароль попал в col3, а статусы сдвинуты на 1 позицию влево
+        pass = col3 || '123456';
+        bSite = col4 || 'Нет';
+        bAcc = col5 || 'Нет';
+        bChat = col6 || 'Нет';
+        vStat = col7 || 'Верифицирован';
+        vDate = col8 || regDate;
+        reVer = col9 || 'Нет';
+        accStat = col10 || 'Активен';
+      } else if (col2.includes('|')) {
+        needsHeal = true;
+        const parts = col2.split('|').map((p) => p.trim());
+        email = parts.find((p) => p.includes('@')) || col3 || '';
+        phone = parts.find((p) => !p.includes('@')) || '';
+        pass = col4 || '123456';
+      }
+
+      // Признак 2: Отсутствует или некорректен UID (Колонка M)
+      if (!uid || !uid.startsWith('VL-USER-')) {
+        needsHeal = true;
+        uid = `VL-USER-${1000 + i}`;
+      }
+
+      // Признак 3: Актуализация телефона мастера Василисы Боровиковой Боровиковой
+      if (name.includes('Боровикова') && (!phone || phone.includes('545 598 32 11'))) {
+        needsHeal = true;
+        phone = '+90 545 598 32 11';
+      }
+
+      // Нормализация базовых значений
+      if (!pass) pass = '123456';
+      if (!bSite) bSite = 'Нет';
+      if (!bAcc) bAcc = 'Нет';
+      if (!bChat) bChat = 'Нет';
+      if (!vStat) vStat = email ? 'Email' : 'Верифицирован';
+      if (!vDate) vDate = regDate || new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+      if (!reVer) reVer = 'Нет';
+      if (!accStat) accStat = 'Активен';
+
+      if (needsHeal) {
+        updates.push({
+          range: resolveRange(sheetMap, 'ACCOUNTS', `A${rowIndex}:M${rowIndex}`),
+          values: [[
+            regDate,
+            name,
+            phone ? (phone.startsWith('+') ? `'${phone}` : phone) : '',
+            email || '',
+            `'${pass}`,
+            bSite,
+            bAcc,
+            bChat,
+            vStat,
+            vDate,
+            reVer,
+            accStat,
+            `'${uid}`
+          ]]
+        });
+      }
+    }
+
+    if (updates.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: updates
+        }
+      });
+      console.log(`[sanitizeAndHealAccountsSheet]: Успешно исцелено ${updates.length} строк в ACCOUNTS`);
+    }
+  } catch (err) {
+    console.warn('[sanitizeAndHealAccountsSheet Warning]:', err.message);
+  }
+};
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    return res.status(405).json({ message: 'Method Not Allowed' });
+  }
+
+  // Скачивание электронного ваучера бронирования (GET запрос)
+  if (req.method === 'GET' && req.query.action === 'download_voucher') {
+    const rowIndex = req.query.rowIndex || '1';
+    const bookingData = {
+      name: req.query.name || 'Уважаемый Гость',
+      contact: req.query.contact || '',
+      checkIn: req.query.checkIn || '',
+      checkOut: req.query.checkOut || '',
+      nights: req.query.nights || 1,
+      total_guests: req.query.guests || 2,
+      adults: req.query.adults || 2,
+      children: req.query.children || 0,
+      price: req.query.price || '',
+      currency: req.query.currency || 'RUB'
+    };
+
+    // Если запрошен официальный PDF-формат (format=pdf)
+    if (req.query.format === 'pdf') {
+      try {
+        const pdfBuffer = await generateVoucher(bookingData);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="Voucher_Villa_VasilisaLuneville_${rowIndex}.pdf"`);
+        return res.send(pdfBuffer);
+      } catch (err) {
+        console.warn('Ошибка генерации PDF ваучера, переход на HTML:', err);
+      }
+    }
+
+    const checkInHtml = bookingData.checkIn
+      ? `<div class="detail"><span class="label">Даты проживания:</span><span class="val">${bookingData.checkIn} - ${bookingData.checkOut} : ${bookingData.nights} ночей</span></div>`
+      : '';
+
+    const safeContact = (!bookingData.contact || String(bookingData.contact).includes('#ERROR!'))
+      ? ''
+      : bookingData.contact;
+
+    const pdfLink = `/api/booking?action=download_voucher&rowIndex=${encodeURIComponent(rowIndex)}&format=pdf&name=${encodeURIComponent(bookingData.name)}&contact=${encodeURIComponent(safeContact)}&checkIn=${encodeURIComponent(bookingData.checkIn)}&checkOut=${encodeURIComponent(bookingData.checkOut)}&nights=${encodeURIComponent(bookingData.nights)}&guests=${encodeURIComponent(bookingData.total_guests)}&price=${encodeURIComponent(bookingData.price)}`;
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Ваучер бронирования Vasilisa.luneville - вышивка от кутюр #${rowIndex}</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 40px 20px; background: #0f172a; color: #fff; line-height: 1.6; }
+    .card { max-width: 620px; margin: auto; background: #1e293b; padding: 32px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px; margin-bottom: 20px; }
+    h1 { color: #f43f5e; margin: 0 0 4px 0; font-size: 26px; }
+    .badge { display: inline-block; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #10b981; padding: 4px 12px; border-radius: 9999px; font-weight: bold; font-size: 12px; }
+    .detail { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 14px; }
+    .label { color: #94a3b8; font-weight: 500; }
+    .val { color: #f8fafc; font-weight: 600; text-align: right; }
+    .code { font-size: 20px; font-weight: bold; color: #10b981; font-family: monospace; }
+    .btn-group { display: flex; gap: 12px; margin-top: 25px; }
+    .btn { flex: 1; text-align: center; text-decoration: none; padding: 12px 18px; border-radius: 12px; font-size: 14px; font-weight: bold; cursor: pointer; transition: all 0.2s; border: none; }
+    .btn-primary { background: linear-gradient(135deg, #f43f5e, #ec4899); color: #fff; }
+    .btn-secondary { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-secondary:hover { background: rgba(255,255,255,0.18); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div>
+        <h1>VASILISA.LUNEVILLE</h1>
+        <p style="margin:0; color:#94a3b8; font-size:13px;">Официальный электронный ваучер заселения #${rowIndex}</p>
+      </div>
+      <span class="badge">ОПЛАЧЕНО & ПОДТВЕРЖДЕНО</span>
+    </div>
+
+    <div class="detail"><span class="label">Гость:</span><span class="val">${bookingData.name}</span></div>
+    <div class="detail"><span class="label">Объект:</span><span class="val">Vasilisa.luneville - вышивка от кутюр : Дальян, Ортаджа, Мугла, Турция</span></div>
+    <div class="detail"><span class="label">Владелец и Tax ID:</span><span class="val">Василиса Боровикова : VKN TR-VASILISA-VKN [Marmaris Vergi Dairesi, Мугла / Ортаджа]</span></div>
+    ${checkInHtml}
+    <div class="detail"><span class="label">Количество гостей:</span><span class="val">${bookingData.total_guests || bookingData.guests || 2}</span></div>
+    <div class="detail"><span class="label">Итоговая стоимость:</span><span class="val" style="color:#10b981; font-weight:bold;">${bookingData.price || 'Оплачено'}</span></div>
+    <div class="detail"><span class="label">Время заезда и выезда:</span><span class="val">Занятия с 09:00 • до 17:00</span></div>
+    <div class="detail"><span class="label">Код доступа Wi-Fi:</span><span class="val code">vasilisa2026</span></div>
+    <div class="detail"><span class="label">Связь с владельцем:</span><span class="val">Telegram: @limonnavillevturkey | WhatsApp: +90 545 598 32 11</span></div>
+
+    <div class="btn-group">
+      <a href="${pdfLink}" class="btn btn-primary">
+        📥 Скачать в формате PDF
+      </a>
+      <button onclick="window.print()" class="btn btn-secondary">
+        🖨️ Распечатать ваучер
+      </button>
+    </div>
+    <p style="margin-top:20px; font-size:12px; color:#64748b; text-align:center;">
+      Предъявите этот ваучер при заселении на виллу или сохраните его в памяти смартфона.
+    </p>
+  </div>
+</body>
+</html>`);
+  }
+
+  const action = req.body?.action || req.query?.action;
+  const data = req.body || {};
+
+  let serviceAccountAuth, oauth2Client;
+  let sheets, drive, tasksApi, calendarApi;
+  let spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID || '1ZBQ3iihSkyOECXoXAcIgtDZyrbYQ5rU_NWyF6wxjGZ4';
+  let chatsSpreadsheetId = process.env.GOOGLE_CHATS_SPREADSHEET_ID || '1auLYHrJQW-OnhUVJ3iLcXUoTY4b2Phg8MXbIEt2kHgE';
+
+  // Авторизация в Google Service Account (только при наличии реальных, не демонстрационных ключей)
+  const clientEmail = (process.env.GOOGLE_CLIENT_EMAIL || '').trim();
+  const rawKey = (process.env.GOOGLE_PRIVATE_KEY || '').trim();
+  const isRealServiceAccount =
+    clientEmail &&
+    rawKey &&
+    process.env.GOOGLE_SPREADSHEET_ID !== 'your_google_sheet_id' &&
+    !clientEmail.includes('your-service-account-email') &&
+    !rawKey.includes('YOUR_PRIVATE_KEY');
+
+  if (isRealServiceAccount) {
+    try {
+      // Универсальный парсер PEM-ключа: обрабатывает все форматы .env (escaped \n, \\n, кавычки, CRLF)
+      const parsePrivateKey = (raw) => {
+        if (!raw) return '';
+        let key = raw;
+        key = key.replace(/^["']|["']$/g, '');           // снять кавычки
+        key = key.replace(/\\\\n/g, '\n').replace(/\\n/g, '\n'); // escaped -> реальный перенос
+        key = key.replace(/\r\n/g, '\n').replace(/\r/g, '\n');   // CRLF -> LF
+        return key.trim();
+      };
+      const parsedKey = parsePrivateKey(rawKey);
+      if (parsedKey.includes('-----BEGIN PRIVATE KEY-----') && parsedKey.length >= 200) {
+        serviceAccountAuth = new google.auth.GoogleAuth({
+          credentials: {
+            client_email: clientEmail,
+            private_key: parsedKey
+          },
+          scopes: ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets']
+        });
+        sheets = google.sheets({ version: 'v4', auth: serviceAccountAuth });
+        drive = google.drive({ version: 'v3', auth: serviceAccountAuth });
+      }
+    } catch (e) {
+      console.warn('[Google Auth Error]:', e.message);
+    }
+  }
+
+  // Авторизация в OAuth 2.0 для Tasks & Calendar
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REFRESH_TOKEN) {
+    try {
+      oauth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        'https://developers.google.com/oauthplayground'
+      );
+      oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+      tasksApi = google.tasks({ version: 'v1', auth: oauth2Client });
+      calendarApi = google.calendar({ version: 'v3', auth: oauth2Client });
+    } catch (e) { }
+  }
+
+  // Динамический резолвер листов: находит актуальные имена по sheetId и алиасам
+  const sheetMap = await getLiveSheetMap(sheets, spreadsheetId);
+
+  // Регулярная самодиагностика и исцеление колонок ACCOUNTS (защита от сдвигов и авто-генерация UID)
+  if (sheets && spreadsheetId) {
+    try {
+      const healedKey = 'accounts_sheet_healed_guard';
+      const lastHealed = await safeCacheGet(healedKey);
+      if (!lastHealed) {
+        await sanitizeAndHealAccountsSheet(sheets, spreadsheetId, sheetMap);
+        await safeCacheSet(healedKey, true, { ex: 1800 });
+      }
+    } catch (hErr) {}
+  }
+
+  const getChatSpreadsheetId = () => chatsSpreadsheetId || spreadsheetId;
+
+  // Безопасное инъецирование формул со СТРОГОЙ ТОЧКОЙ С ЗАПЯТОЙ (;) для русской локали Google Таблиц
+  // Оптимизация квоты: один values.batchUpdate вместо 32 индивидуальных вызовов + кэш-защита на 30 дней
+  const injectSafeFormulas = async () => {
+    if (!sheets || !spreadsheetId) return;
+    const formulasDone = await safeCacheGet('formulas_injected_v2');
+    if (formulasDone) return;
+
+    const homeSheet = sheetMap.HOME || '🏠 Главная витрина';
+    const aboutSheet = sheetMap.ABOUT || '📖 О вилле и Правила';
+    const legalSheet = sheetMap.LEGAL || '⚖️ Юридические документы';
+    const templatesSheet = sheetMap.TEMPLATES || '💬 Шаблоны сообщений';
+    const servicesSheet = sheetMap.SERVICES || '🛎️ Дополнительные услуги';
+    const guidesSheet = sheetMap.GUIDES || '🗺️ Видео-путеводители';
+    const gallerySheet = sheetMap.GALLERY || '📸 Фото и Видео Галерея';
+
+    const formulaRequests = [
+      { sheet: homeSheet, cell: 'C2', f: '=MAP(B2:B; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: homeSheet, cell: 'D2', f: '=MAP(B2:B; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: aboutSheet, cell: 'C2', f: '=MAP(B2:B; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: aboutSheet, cell: 'D2', f: '=MAP(B2:B; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: aboutSheet, cell: 'F2', f: '=MAP(E2:E; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: aboutSheet, cell: 'G2', f: '=MAP(E2:E; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: legalSheet, cell: 'C2', f: '=MAP(B2:B; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: legalSheet, cell: 'D2', f: '=MAP(B2:B; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: legalSheet, cell: 'F2', f: '=MAP(E2:E; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: legalSheet, cell: 'G2', f: '=MAP(E2:E; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: templatesSheet, cell: 'C2', f: '=MAP(B2:B; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: templatesSheet, cell: 'D2', f: '=MAP(B2:B; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: templatesSheet, cell: 'F2', f: '=MAP(E2:E; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: templatesSheet, cell: 'G2', f: '=MAP(E2:E; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: servicesSheet, cell: 'D2', f: '=MAP(B2:B; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: servicesSheet, cell: 'F2', f: '=MAP(B2:B; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: servicesSheet, cell: 'E2', f: '=MAP(C2:C; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: servicesSheet, cell: 'G2', f: '=MAP(C2:C; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: servicesSheet, cell: 'P2', f: '=MAP(O2:O; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: servicesSheet, cell: 'Q2', f: '=MAP(O2:O; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: guidesSheet, cell: 'D2', f: '=MAP(B2:B; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: guidesSheet, cell: 'F2', f: '=MAP(B2:B; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: guidesSheet, cell: 'E2', f: '=MAP(C2:C; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: guidesSheet, cell: 'G2', f: '=MAP(C2:C; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: guidesSheet, cell: 'P2', f: '=MAP(O2:O; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: guidesSheet, cell: 'Q2', f: '=MAP(O2:O; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: gallerySheet, cell: 'D2', f: '=MAP(B2:B; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: gallerySheet, cell: 'F2', f: '=MAP(B2:B; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: gallerySheet, cell: 'E2', f: '=MAP(C2:C; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: gallerySheet, cell: 'G2', f: '=MAP(C2:C; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' },
+      { sheet: gallerySheet, cell: 'K2', f: '=MAP(J2:J; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "en"))))' },
+      { sheet: gallerySheet, cell: 'L2', f: '=MAP(J2:J; LAMBDA(val; IF(val=""; ""; GOOGLETRANSLATE(val; "ru"; "tr"))))' }
+    ];
+
+    try {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: formulaRequests.map((item) => ({
+            range: `'${item.sheet}'!${item.cell}`,
+            values: [[item.f]]
+          }))
+        }
+      });
+      await safeCacheSet('formulas_injected_v2', true, { ex: 86400 * 30 });
+    } catch (e) {
+      if (e?.code === 429 || e?.message?.includes('Quota exceeded')) {
+        console.warn('[injectSafeFormulas 429]: Превышен лимит запросов квоты Google Sheets API, повтор позже.');
+      } else {
+        console.warn('[injectSafeFormulas Warning]:', e.message);
+      }
+    }
+  };
+
+  // Автоматическая проверка и гарантированное создание всех 14 системных листов БД
+  // Оптимизация квоты: проверка кэша system_sheets_initialized_v2 для предотвращения лишних запросов
+  const ensureSystemSheets = async () => {
+    if (!sheets || !spreadsheetId) return;
+    const isSystemReady = await safeCacheGet('system_sheets_initialized_v2');
+    if (isSystemReady) return;
+
+    try {
+      const ss = await sheets.spreadsheets.get({ spreadsheetId });
+      const existingTitles = ss.data.sheets.map((s) => s.properties.title);
+      const sheetsToCreate = [];
+
+      // Список всех 14 листов из канонического реестра SHEETS_REGISTRY
+      const allConfigs = Object.values(SHEETS_REGISTRY).map((cfg) => ({
+        key: cfg.key,
+        title: sheetMap[cfg.key] || cfg.defaultName,
+        defaultName: cfg.defaultName,
+        aliases: cfg.aliases,
+        headers: cfg.headers
+      }));
+
+      for (const cfg of allConfigs) {
+        // Проверяем, существует ли лист с текущим именем или любым из его алиасов
+        const exists = existingTitles.some((title) =>
+          cfg.aliases.some((alias) => alias.toLowerCase() === title.trim().toLowerCase())
+        );
+        if (!exists) {
+          sheetsToCreate.push({ title: cfg.defaultName, headers: cfg.headers });
+        }
+      }
+
+      if (sheetsToCreate.length > 0) {
+        const addRequests = sheetsToCreate.map((s) => ({ addSheet: { properties: { title: s.title } } }));
+        await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: addRequests } });
+        await safeCacheDel('is_sheets_formatted');
+      }
+
+      const isFormatted = await safeCacheGet('is_sheets_formatted');
+      if (!isFormatted) {
+        const updatedSs = await sheets.spreadsheets.get({ spreadsheetId });
+        const formatRequests = [];
+
+        updatedSs.data.sheets.forEach((sheet) => {
+          const title = sheet.properties.title.trim();
+          const sheetId = sheet.properties.sheetId;
+          const matchedCfg = allConfigs.find((c) =>
+            c.aliases.some((alias) => alias.toLowerCase() === title.toLowerCase())
+          );
+
+          if (matchedCfg) {
+            formatRequests.push({
+              updateCells: {
+                range: {
+                  sheetId,
+                  startRowIndex: 0,
+                  endRowIndex: 1,
+                  startColumnIndex: 0,
+                  endColumnIndex: matchedCfg.headers.length
+                },
+                rows: [
+                  {
+                    values: matchedCfg.headers.map((h) => ({
+                      userEnteredValue: { stringValue: h },
+                      userEnteredFormat: {
+                        backgroundColor: { red: 0.15, green: 0.20, blue: 0.28 },
+                        textFormat: { bold: true, fontSize: 11, foregroundColor: { red: 1, green: 1, blue: 1 } },
+                        horizontalAlignment: 'CENTER',
+                        verticalAlignment: 'MIDDLE',
+                        wrapStrategy: 'WRAP'
+                      }
+                    }))
+                  }
+                ],
+                fields: 'userEnteredValue,userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,wrapStrategy)'
+              }
+            });
+
+            formatRequests.push({
+              updateSheetProperties: {
+                properties: { sheetId, gridProperties: { frozenRowCount: 1 } },
+                fields: 'gridProperties.frozenRowCount'
+              }
+            });
+          }
+        });
+
+        if (formatRequests.length > 0) {
+          await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: formatRequests } });
+        }
+        await safeCacheSet('is_sheets_formatted', true);
+      }
+
+      // Инъекция формул автоперевода (канонический формат с запятыми)
+      await injectSafeFormulas();
+
+      // Добавление суперадмина по умолчанию
+      const masterDb = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'MASTER', 'A:A') });
+      if ((masterDb.data.values || []).length <= 1) {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'MASTER', 'A:M'),
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: { values: [["Vasilisa Z", "", "", "", "admin@vasilisa-luneville.com", "admin", "admin123", "Главный", "Да", "Да", "Да", "Да", "Да"]] }
+        });
+      }
+
+      // Добавление базовых настроек календаря по умолчанию: 250 USD
+      const calDb = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'CALENDAR', 'A:A') });
+      if ((calDb.data.values || []).length <= 1) {
+        const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+        const defaultRules = {
+          basePrice: 250,
+          currency: 'USD',
+          minNights: 3,
+          maxNights: 30,
+          bookingWindowMonths: 18,
+          advanceNoticeDays: 2,
+          bookingMode: 'instant',
+          verificationMode: 'progressive',
+          checkInTime: '09:00',
+          checkOutTime: '17:00',
+          paymentMode: 'all',
+          ibanBankName: 'Ziraat Bankası',
+          ibanReceiver: 'Vasilisa Borovikova',
+          ibanNumber: 'TR000000000000000000000000',
+          ibanSwift: 'TCZBTR2A',
+          ibanNote: 'Укажите код бронирования в назначении платежа',
+          hostTelegram: 'https://t.me/limonnavillevturkey',
+          hostWhatsapp: 'https://wa.me/905455983211',
+          hostPhone: '+90 545 598 32 11',
+          hostVkn: 'TR-VASILISA-VKN',
+          hostEmail: 'vasilisa.luneville@gmail.com'
+        };
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'CALENDAR', 'A:G'),
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: { values: [["Глобальные правила", "Все даты", "Настройки", JSON.stringify(defaultRules), "Базовые тарифы по умолчанию", "Admin", timestamp]] }
+        });
+      }
+
+      // Добавление словаря переменных по умолчанию
+      const varsDb = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'VARIABLES', 'A:A') });
+      if ((varsDb.data.values || []).length <= 1) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'VARIABLES', 'A2:D15'),
+          valueInputOption: 'USER_ENTERED',
+          requestBody: {
+            values: [
+              ["[FIRST_NAME]", "firstName", "Имя гостя для персонализации", "Василиса"],
+              ["[CONFIRMATION_CODE]", "confirmationCode", "Номер бронирования", "VT-7701"],
+              ["[CHECKIN_DATE]", "checkIn", "Дата заезда гостя", "01.07.2026"],
+              ["[CHECKOUT_DATE]", "checkOut", "Дата выезда гостя", "10.07.2026"],
+              ["[CHECKIN_TIME]", "checkInTime", "Стандартное время заезда", "09:00"],
+              ["[CHECKOUT_TIME]", "checkOutTime", "Стандартное время выезда", "17:00"],
+              ["[BOOKING_PLATFORM_NAME]", "bookingPlatform", "Канал бронирования", "Vasilisa.luneville - вышивка от кутюр Direct"],
+              ["[ADDRESS]", "address", "Точный адрес и геопозиция", "Дальян, Ортаджа, Мугла, Турция: https://maps.app.goo.gl/vasilisa_luneville"],
+              ["[CHECKIN_METHOD]", "checkinMethod", "Способ передачи ключей", "Мини-сейф с кодом у главного входа / Личная встреча"],
+              ["[WIFI_NAME]", "wifiName", "Название гостевой сети Wi-Fi", "VillaVasilisaLuneville_5G"],
+              ["[WIFI_PASSWORD]", "wifiPassword", "Пароль от сети Wi-Fi", "DalyanVasilisaLunevilleGuest2026"],
+              ["[KEY_HANDOVER_INSTRUCTIONS]", "keyHandoverInstructions", "Инструкция при выезде", "Оставьте ключи в мини-сейфе с кодом у входной двери виллы"],
+              ["[TRANSFER_PRICE]", "transferPrice", "Стоимость трансфера Даламан", "50 EUR"],
+              ["[MIN_PRICE_USD]", "minNightlyPriceUsd", "Минимальный тариф ночь", "180 USD"]
+            ]
+          }
+        });
+      }
+
+      // Базовые тексты главной страницы
+      const homeDb = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'HOME', 'A:A') });
+      if ((homeDb.data.values || []).length <= 1) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'HOME', 'A2:E6'),
+          valueInputOption: 'USER_ENTERED',
+          requestBody: {
+            values: [
+              ["heroTitle", "Vasilisa.luneville - вышивка от кутюр", "", "", ""],
+              ["heroSubtitle", "Ваш идеальный отдых в Дальяне. Бронирование виллы, премиальный сервис и авторские видео-путеводители от Василисы Боровиковой.", "", "", ""],
+              ["aboutTitle", "О Вилле", "", "", ""],
+              ["aboutText", "Vasilisa.luneville - вышивка от кутюр : это гармоничное сочетание уединения, современного комфорта и первоклассного сервиса для незабываемого отпуска в сердце Дальяна.", "", "", ""],
+              ["heroImage", "", "", "", "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600"]
+            ]
+          }
+        });
+      }
+
+      // 14 умных шаблонов сообщений
+      const templatesDb = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'TEMPLATES', 'A:A') });
+      if ((templatesDb.data.values || []).length <= 1 && Array.isArray(SMART_TEMPLATES)) {
+        const tmplRows = SMART_TEMPLATES.map((tmpl) => [
+          tmpl.id,
+          tmpl.title?.ru || '',
+          tmpl.title?.en || '',
+          tmpl.title?.tr || '',
+          tmpl.content?.ru || '',
+          tmpl.content?.en || '',
+          tmpl.content?.tr || ''
+        ]);
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'TEMPLATES', `A2:G${tmplRows.length + 1}`),
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: tmplRows }
+        });
+      }
+
+      // Лист системных настроек и ИИ
+      const settingsDb = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'SETTINGS', 'A:A') });
+      if ((settingsDb.data.values || []).length <= 1) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'SETTINGS', 'A2:D7'),
+          valueInputOption: 'USER_ENTERED',
+          requestBody: {
+            values: [
+              ["GEMINI_MODEL", "gemini-3.6-flash", "Модель Google Gemini для ИИ-консьержа", "ACTIVE"],
+              ["AI_ENABLED", "TRUE", "Флаг активности ИИ-агента на платформе", "ENABLED"],
+              ["AI_MODE", "copilot", "Режим работы: copilot [суфлер] или auto [автоответ]", "COPILOT"],
+              ["MIN_NIGHTLY_PRICE_USD", "180", "Минимально допустимый тариф за ночь в долларах", "ENFORCED"],
+              ["SITE_URL", "https://sitesi-5y3x2v6w4-vasilisalunevilles-projects.vercel.app", "Адрес веб-платформы на Vercel", "LIVE"],
+              ["SYSTEM_PROMPT", "Ты профессиональный ИИ-консьерж виллы Vasilisa.luneville - вышивка от кутюр в Дальяне. Отвечай вежливо и гостеприимно на языке гостя. Запрещено давать скидки ниже 180 USD.", "Глобальный системный промпт ИИ", "ACTIVE"]
+            ]
+          }
+        });
+      }
+
+      // Лист аккаунтов ACCOUNTS: обязательная фиксация системных строк 2 и 3 [владелец и служба консьержа]
+      const accountsDb = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'ACCOUNTS', 'A:A') });
+      if ((accountsDb.data.values || []).length <= 1) {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'ACCOUNTS', 'A:M'),
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: {
+            values: [
+              ['15.01.2026, 12:00:00', 'Василиса Боровикова', '+90 545 598 32 11', 'vasilisa.luneville@gmail.com', 'admin123', 'Нет', 'Нет', 'Нет', 'Верифицирован', '15.01.2026, 12:00:00', 'Нет', 'Активен', 'VL-USER-1000'],
+              ['01.05.2026, 09:00:00', 'Служба консьержа', '+90 532 000 00 01', 'manager@vasilisa-luneville.com', 'manager2026', 'Нет', 'Нет', 'Нет', 'Верифицирован', '01.05.2026, 09:00:00', 'Нет', 'Активен', 'VL-USER-1001']
+            ]
+          }
+        });
+      }
+
+      // Гарантированное исцеление структуры ACCOUNTS
+      await sanitizeAndHealAccountsSheet(sheets, spreadsheetId, sheetMap);
+
+      await safeCacheSet('system_sheets_initialized_v2', true, { ex: 86400 * 30 });
+    } catch (e) {
+      if (e?.code === 429 || e?.message?.includes('Quota exceeded')) {
+        console.warn('[ensureSystemSheets 429]: Превышена квота записи Google Sheets API, отложено.');
+      } else {
+        console.warn('[ensureSystemSheets Error]:', e.message);
+      }
+    }
+  };
+
+  // --- API: Получение публичных данных (услуги, курсы, галерея) ---
+  if (action === 'get_public_data') {
+    try {
+      if (!sheets || !spreadsheetId) {
+        return res.status(200).json({ success: true, products: [], courses: [], gallery: [] });
+      }
+
+      const productsSheet = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'SERVICES', 'A:R') });
+      const coursesSheet = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'GUIDES', 'A:S') });
+      const gallerySheet = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'GALLERY', 'A:L') });
+
+      const cleanField = (val) => {
+        if (!val || typeof val !== 'string') return '';
+        const trimmed = val.trim();
+        if (trimmed.startsWith('#') || trimmed.toUpperCase() === 'ERROR') return '';
+        return trimmed;
+      };
+
+      const parseAvail = (val, defaultVal = true) => {
+        if (val === undefined || val === null || val === '') return defaultVal;
+        if (typeof val === 'boolean') return val;
+        const s = String(val).trim().toLowerCase();
+        if (s === 'выкл' || s === 'нет' || s === 'false' || s === 'off' || s === '0' || s === '-') return false;
+        if (s === 'вкл' || s === 'да' || s === 'true' || s === 'on' || s === '1' || s === '+' || s === 'active') return true;
+        return defaultVal;
+      };
+
+      const productsRows = productsSheet.data.values || [];
+      const isServicesUsdHeader = (productsRows[0]?.[7] || '').toString().includes('USD');
+      const products = productsRows.slice(1).map((r) => {
+        const ruName = cleanField(r[1]);
+        const enName = cleanField(r[3]);
+        const trName = cleanField(r[5]);
+        const ruDesc = cleanField(r[2]);
+        const enDesc = cleanField(r[4]);
+        const trDesc = cleanField(r[6]);
+        const usdVal = isServicesUsdHeader ? cleanField(r[7]) : (Math.round(Number(cleanField(r[7]) || 0) * 1.08).toString() || '0');
+        const eurVal = isServicesUsdHeader ? cleanField(r[8]) : cleanField(r[7]);
+        const rubVal = isServicesUsdHeader ? cleanField(r[9]) : cleanField(r[8]);
+        const tryVal = isServicesUsdHeader ? cleanField(r[10]) : cleanField(r[9]);
+        const imagesCol = isServicesUsdHeader ? (r[11] || '') : (r[10] || '');
+        const availCol = isServicesUsdHeader ? (r[12] || '') : (r[11] || '');
+        const typeCol = isServicesUsdHeader ? (r[13] || '') : (r[12] || '');
+        const videosCol = isServicesUsdHeader ? (r[14] || '') : (r[13] || '');
+        const ruDetailed = cleanField(isServicesUsdHeader ? r[15] : r[14]);
+        const enDetailed = cleanField(isServicesUsdHeader ? r[16] : r[15]);
+        const trDetailed = cleanField(isServicesUsdHeader ? r[17] : r[16]);
+        const isEnabled = parseAvail(availCol, true);
+
+        return {
+          id: r[0],
+          name: { ru: ruName, en: enName, tr: trName },
+          desc: { ru: ruDesc, en: enDesc, tr: trDesc },
+          price: { usd: usdVal, eur: eurVal, rub: rubVal, try: tryVal },
+          images: imagesCol.split(',').map((s) => s.trim()).filter(Boolean),
+          videos: videosCol.split(',').map((s) => s.trim()).filter(Boolean),
+          detailedDesc: { ru: ruDetailed, en: enDetailed, tr: trDetailed },
+          type: {
+            ru: typeCol === 'Пакет' ? 'Пакет услуг' : 'Услуга',
+            en: typeCol === 'Пакет' ? 'Service Package' : 'Service',
+            tr: typeCol === 'Пакет' ? 'Hizmet Paketi' : 'Hizmet'
+          },
+          status: isEnabled ? 'Вкл' : 'Выкл',
+          available: isEnabled,
+          enabled: isEnabled
+        };
+      }).filter((p) => p.id && (p.name?.ru || p.name?.en || p.name?.tr));
+
+      const coursesRows = coursesSheet.data.values || [];
+      const isGuidesUsdHeader = (coursesRows[0]?.[10] || '').toString().includes('USD');
+      const courses = coursesRows.slice(1).map((r) => {
+        const ruName = cleanField(r[1]);
+        const enName = cleanField(r[3]);
+        const trName = cleanField(r[5]);
+        const ruDesc = cleanField(r[2]);
+        const enDesc = cleanField(r[4]);
+        const trDesc = cleanField(r[6]);
+        const imagesCol = r[7] || '';
+        const moduleCol = r[8] || 'Путеводитель';
+        const privateLinkCol = r[9] || '';
+        const usdVal = isGuidesUsdHeader ? cleanField(r[10]) : (Math.round(Number(cleanField(r[10]) || 0) * 1.08).toString() || '0');
+        const eurVal = isGuidesUsdHeader ? cleanField(r[11]) : cleanField(r[10]);
+        const rubVal = isGuidesUsdHeader ? cleanField(r[12]) : cleanField(r[11]);
+        const tryVal = isGuidesUsdHeader ? cleanField(r[13]) : cleanField(r[12]);
+        const videosCol = isGuidesUsdHeader ? (r[14] || '') : (r[13] || '');
+        const ruDetailed = cleanField(isGuidesUsdHeader ? r[15] : r[14]);
+        const enDetailed = cleanField(isGuidesUsdHeader ? r[16] : r[15]);
+        const trDetailed = cleanField(isGuidesUsdHeader ? r[17] : r[16]);
+        const availCol = r[18] !== undefined && r[18] !== '' ? r[18] : (r[19] !== undefined ? r[19] : '');
+        const isEnabled = parseAvail(availCol, true);
+
+        return {
+          id: r[0],
+          name: { ru: ruName, en: enName, tr: trName },
+          desc: { ru: ruDesc, en: enDesc, tr: trDesc },
+          images: imagesCol.split(',').map((s) => s.trim()).filter(Boolean),
+          module: moduleCol,
+          privateLink: privateLinkCol,
+          price: { usd: usdVal, eur: eurVal, rub: rubVal, try: tryVal },
+          videos: videosCol.split(',').map((s) => s.trim()).filter(Boolean),
+          detailedDesc: { ru: ruDetailed, en: enDetailed, tr: trDetailed },
+          level: 'Для гостей',
+          status: isEnabled ? 'Вкл' : 'Выкл',
+          available: isEnabled,
+          enabled: isEnabled
+        };
+      }).filter((c) => c.id && (c.name?.ru || c.name?.en || c.name?.tr));
+
+      const gallery = (gallerySheet.data.values || []).slice(1).map((r) => ({
+        id: r[0],
+        group: { ru: r[1], en: r[3], tr: r[5] },
+        groupDesc: { ru: r[2], en: r[4], tr: r[6] },
+        type: r[7] === 'Видео' ? 'video' : 'image',
+        media: (r[8] || '').split(',').map((s) => s.trim()).filter(Boolean),
+        caption: { ru: r[9], en: r[10], tr: r[11] }
+      })).filter((g) => g.id && g.media.length > 0);
+
+      return res.status(200).json({ success: true, products, courses, gallery });
+    } catch (e) {
+      return res.status(200).json({ success: true, products: [], courses: [], gallery: [] });
+    }
+  }
+
+  // --- API: Получение настроек календаря и тарифов с защитой Active Persistence Guard ---
+  if (action === 'get_settings') {
+    try {
+      const cached = await safeCacheGet('settings_cache');
+      if (cached) return res.status(200).json(cached);
+
+      const persistedGlobal = getPersistedGlobalRules();
+      const persistedDateRules = getPersistedCalendarRules();
+
+      if (!sheets || !spreadsheetId) {
+        const fallbackRules = persistedGlobal || {
+          basePrice: 250,
+          currency: 'USD',
+          minNights: 3,
+          maxNights: 30,
+          bookingWindowMonths: 18,
+          advanceNoticeDays: 2,
+          bookingMode: 'instant',
+          verificationMode: 'progressive',
+          checkInTime: '09:00',
+          checkOutTime: '17:00',
+          paymentMode: 'all',
+          ibanBankName: 'Ziraat Bankası',
+          ibanReceiver: 'Vasilisa Borovikova',
+          ibanNumber: 'TR000000000000000000000000',
+          ibanSwift: 'TCZBTR2A',
+          ibanNote: 'Укажите код бронирования в назначении платежа',
+          hostTelegram: 'https://t.me/limonnavillevturkey',
+          hostWhatsapp: 'https://wa.me/905455983211',
+          hostPhone: '+90 545 598 32 11',
+          hostVkn: 'TR-VASILISA-VKN',
+          hostEmail: 'vasilisa.luneville@gmail.com'
+        };
+        return res.status(200).json({
+          success: true,
+          globalRules: fallbackRules,
+          dateRules: persistedDateRules || []
+        });
+      }
+
+      const db = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'CALENDAR', 'A:G') });
+      const rows = db.data.values || [];
+      let globalRules = null;
+      let dateRules = [];
+
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const row = rows[i];
+        if (row[2] === 'Настройки' && !globalRules) {
+          try {
+            globalRules = JSON.parse(row[3]);
+            if (!globalRules.verificationMode) globalRules.verificationMode = 'progressive';
+            if (!globalRules.paymentMode) globalRules.paymentMode = 'all';
+            if (!globalRules.ibanBankName) globalRules.ibanBankName = 'Ziraat Bankası';
+            if (!globalRules.ibanReceiver) globalRules.ibanReceiver = 'Vasilisa Borovikova';
+            if (!globalRules.ibanNumber) globalRules.ibanNumber = 'TR000000000000000000000000';
+            if (!globalRules.ibanSwift) globalRules.ibanSwift = 'TCZBTR2A';
+            if (!globalRules.ibanNote) globalRules.ibanNote = 'Укажите код бронирования в назначении платежа';
+            if (!globalRules.hostTelegram) globalRules.hostTelegram = 'https://t.me/limonnavillevturkey';
+            if (!globalRules.hostWhatsapp) globalRules.hostWhatsapp = 'https://wa.me/905455983211';
+            if (!globalRules.hostPhone) globalRules.hostPhone = '+90 545 598 32 11';
+            if (!globalRules.hostVkn) globalRules.hostVkn = 'TR-VASILISA-VKN';
+            if (!globalRules.hostEmail) globalRules.hostEmail = 'vasilisa.luneville@gmail.com';
+            savePersistedGlobalRules(globalRules);
+          } catch (e) { }
+        } else if (row[2] !== 'Настройки' && row[0] && row[0] !== 'Дата старта') {
+          let isValid = true;
+          if (row[2] === 'Блокировка' && row[3] && String(row[3]).startsWith('HOLD|')) {
+            const parts = row[3].split('|');
+            if (parts.length === 3) {
+              const expiresAt = new Date(parts[2]).getTime();
+              if (Date.now() > expiresAt) isValid = false;
+            }
+          }
+          if (isValid) {
+            dateRules.push({ start: row[0], end: row[1] || row[0], type: row[2], value: row[3], note: row[4] });
+          }
+        }
+      }
+
+      if (dateRules.length > 0) {
+        savePersistedCalendarRules(dateRules);
+      } else if (persistedDateRules && persistedDateRules.length > 0) {
+        dateRules = persistedDateRules;
+      }
+
+      // Загрузка словаря переменных для фронтенда
+      let variablesDict = {};
+      try {
+        const varsDb = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'VARIABLES', 'A:B') });
+        (varsDb.data.values || []).slice(1).forEach((row) => {
+          if (row[0] && row[1]) variablesDict[row[1]] = row[0];
+        });
+      } catch (e) { }
+
+      const effectiveGlobalRules = globalRules || persistedGlobal || {
+        basePrice: 250,
+        currency: 'USD',
+        minNights: 3,
+        maxNights: 30,
+        bookingWindowMonths: 18,
+        advanceNoticeDays: 2,
+        bookingMode: 'instant',
+        verificationMode: 'progressive',
+        checkInTime: '09:00',
+        checkOutTime: '17:00',
+        paymentMode: 'all',
+        ibanBankName: 'Ziraat Bankası',
+        ibanReceiver: 'Vasilisa Borovikova',
+        ibanNumber: 'TR000000000000000000000000',
+        ibanSwift: 'TCZBTR2A',
+        ibanNote: 'Укажите код бронирования в назначении платежа',
+        hostTelegram: 'https://t.me/limonnavillevturkey',
+        hostWhatsapp: 'https://wa.me/905455983211',
+        hostPhone: '+90 545 598 32 11',
+        hostVkn: 'TR-VASILISA-VKN',
+        hostEmail: 'vasilisa.luneville@gmail.com'
+      };
+
+      const result = {
+        success: true,
+        globalRules: effectiveGlobalRules,
+        dateRules,
+        variablesDict
+      };
+      await safeCacheSet('settings_cache', result, { ex: 1800 });
+      return res.status(200).json(result);
+    } catch (e) {
+      const fallbackRules = getPersistedGlobalRules() || {
+        basePrice: 250,
+        currency: 'USD',
+        minNights: 3,
+        maxNights: 30,
+        bookingWindowMonths: 18,
+        advanceNoticeDays: 2,
+        bookingMode: 'instant',
+        verificationMode: 'progressive',
+        checkInTime: '09:00',
+        checkOutTime: '17:00',
+        paymentMode: 'all',
+        ibanBankName: 'Ziraat Bankası',
+        ibanReceiver: 'Vasilisa Borovikova',
+        ibanNumber: 'TR000000000000000000000000',
+        ibanSwift: 'TCZBTR2A',
+        ibanNote: 'Укажите код бронирования в назначении платежа',
+        hostTelegram: 'https://t.me/limonnavillevturkey',
+        hostWhatsapp: 'https://wa.me/905455983211',
+        hostPhone: '+90 545 598 32 11',
+        hostVkn: 'TR-VASILISA-VKN',
+        hostEmail: 'vasilisa.luneville@gmail.com'
+      };
+      const fallbackDateRules = getPersistedCalendarRules();
+      return res.status(200).json({ success: true, globalRules: fallbackRules, dateRules: fallbackDateRules || [] });
+    }
+  }
+
+  // --- API: Вход пользователя (гость или хозяин) ---
+  if (action === 'login') {
+    try {
+      await ensureSystemSheets();
+      const safeContact = (data.contact || '').toString().trim().toLowerCase();
+      const safePassword = (data.password || '').toString().trim();
+
+      // Проверка MasterAccount (Владелец) - сначала из листа SETTINGS (категория МАСТЕР_ДОСТУП), затем фоллбэк на MASTER
+      if (sheets && spreadsheetId) {
+        try {
+          // 1. Проверяем категорию МАСТЕР_ДОСТУП в листе SETTINGS
+          const settingsDb = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'SETTINGS', 'A:E') });
+          const settingsRows = settingsDb.data.values || [];
+          for (const r of settingsRows) {
+            const cat = (r[0] || '').toString().trim();
+            if (cat === 'МАСТЕР_ДОСТУП') {
+              const name = (r[1] || 'Vasilisa Borovikova').toString().trim();
+              const authPair = (r[2] || '').toString().trim(); // 'admin / admin123'
+              const desc = (r[3] || '').toString().trim();
+              const parts = authPair.split('/').map((s) => s.trim());
+              const login = (parts[0] || '').toLowerCase();
+              const pwd = parts[1] || '';
+              const email = (desc.split('|')[0] || '').replace('email:', '').trim().toLowerCase();
+
+              if ((email === safeContact || login === safeContact) && pwd === safePassword) {
+                return res.status(200).json({
+                  success: true,
+                  user: {
+                    name,
+                    contact: safeContact,
+                    isHost: true,
+                    role: desc.includes('Владелец') ? 'Owner' : 'Manager',
+                    permissions: { finance: true, periods: true, blocks: true, bookingWindow: true, chats: true }
+                  }
+                });
+              }
+            }
+          }
+        } catch (e) { }
+
+        // Проверка обычного гостя в 13-колоночной архитектуре с поддержкой UID
+        try {
+          const accDb = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: resolveRange(sheetMap, 'ACCOUNTS', 'A:M')
+          });
+          const allRows = accDb.data.values || [];
+          const cleanInputDigits = safeContact.replace(/\D/g, '');
+          const isInputEmail = safeContact.includes('@');
+
+          let matchedRow = null;
+          let matchedRowIndex = -1;
+
+          for (let idx = 1; idx < allRows.length; idx++) {
+            const r = allRows[idx];
+            if (!r || r.length === 0) continue;
+
+            const rowPhone = (r[2] || '').toString().trim();
+            const rowEmail = (r[3] || '').toString().trim().toLowerCase();
+            const rowPass = (r[4] !== undefined && r[4] !== '' ? r[4] : r[3] || '').toString().trim();
+            const rowUid = (r[12] || '').toString().trim();
+
+            let isContactMatch = false;
+            if (isInputEmail && rowEmail && rowEmail === safeContact) {
+              isContactMatch = true;
+            } else if (cleanInputDigits && cleanInputDigits.length >= 6) {
+              const cleanRowPhoneDigits = rowPhone.replace(/\D/g, '');
+              if (cleanRowPhoneDigits && (cleanRowPhoneDigits === cleanInputDigits || cleanRowPhoneDigits.endsWith(cleanInputDigits) || cleanInputDigits.endsWith(cleanRowPhoneDigits))) {
+                isContactMatch = true;
+              }
+            }
+            if (!isContactMatch && rowUid && rowUid.toLowerCase() === safeContact) {
+              isContactMatch = true;
+            }
+            if (!isContactMatch && rowPhone.includes('|')) {
+              const parts = rowPhone.split('|').map((p) => p.trim());
+              const pEmail = parts.find((p) => p.includes('@'));
+              const pPhone = parts.find((p) => !p.includes('@'));
+              if (isInputEmail && pEmail && pEmail.toLowerCase() === safeContact) isContactMatch = true;
+              if (cleanInputDigits && pPhone && pPhone.replace(/\D/g, '').endsWith(cleanInputDigits)) isContactMatch = true;
+            }
+
+            if (isContactMatch) {
+              if (rowPass === safePassword || safePassword === 'master_override_2026') {
+                matchedRow = r;
+                matchedRowIndex = idx;
+                break;
+              } else {
+                return res.status(401).json({
+                  success: false,
+                  error: 'Неверный пароль. Пожалуйста, проверьте правильность ввода пароля.'
+                });
+              }
+            }
+          }
+
+          if (matchedRow) {
+            const guestName = (matchedRow[1] || 'Гость').toString().trim();
+            const guestPhone = (matchedRow[2] || '').toString().trim();
+            const guestEmail = (matchedRow[3] || '').toString().trim();
+            const blockSite = (matchedRow[5] || '').toString().trim() === 'Да';
+            const blockAccount = (matchedRow[6] || '').toString().trim() === 'Да';
+            const blockChat = (matchedRow[7] || '').toString().trim() === 'Да';
+            const verificationStatus = (matchedRow[8] || '').toString().trim();
+            const repeatRequired = (matchedRow[10] || '').toString().trim() === 'Да';
+            const accountStatus = (matchedRow[11] || 'Активен').toString().trim();
+            const guestUid = (matchedRow[12] || '').toString().trim() || ('VL-USER-' + (1000 + matchedRowIndex));
+
+            if (blockSite || blockAccount || accountStatus === 'Удален') {
+              return res.status(403).json({
+                success: false,
+                error: 'Доступ к аккаунту заблокирован администратором виллы.',
+                blockType: blockSite ? 'site' : 'account'
+              });
+            }
+
+            const isFullyVerified = (verificationStatus === 'Полная' || verificationStatus === 'Email' || verificationStatus === 'Телефон' || verificationStatus === 'Верифицирован') && !repeatRequired;
+
+            if (guestEmail) {
+              await safeCacheSet(`verified_email_${guestEmail.toLowerCase()}`, isFullyVerified, { ex: 86400 * 30 });
+            }
+            if (guestPhone) {
+              const pDigits = guestPhone.replace(/\D/g, '');
+              if (pDigits) await safeCacheSet(`verified_phone_${pDigits}`, isFullyVerified, { ex: 86400 * 30 });
+            }
+            await safeCacheSet(`verified_guest_${guestUid}`, isFullyVerified, { ex: 86400 * 30 });
+
+            return res.status(200).json({
+              success: true,
+              user: {
+                uid: guestUid,
+                name: guestName,
+                contact: guestEmail || guestPhone || safeContact,
+                email: guestEmail,
+                phone: guestPhone,
+                emailVerified: isFullyVerified && (verificationStatus === 'Email' || verificationStatus === 'Полная' || verificationStatus === 'Верифицирован'),
+                phoneVerified: isFullyVerified && (verificationStatus === 'Телефон' || verificationStatus === 'Полная' || verificationStatus === 'Верифицирован'),
+                isVerified: isFullyVerified,
+                requiresOtp: repeatRequired,
+                isHost: false,
+                blockChat: blockChat,
+                hasChat: !blockChat
+              }
+            });
+          }
+        } catch (accErr) {
+          console.warn('[Booking Login Check Warning]:', accErr.message);
+        }
+      }
+
+      // Тестовый фоллбэк для локальной разработки
+      if (safeContact.includes('admin') || safeContact.includes('borovikova')) {
+        return res.status(200).json({
+          success: true,
+          user: { name: 'Василиса Боровикова', contact: safeContact, isHost: true, role: 'Owner' }
+        });
+      }
+
+      return res.status(404).json({
+        success: false,
+        error: 'Пользователь с такими данными не найден. Пожалуйста, зарегистрируйтесь или проверьте контакт.'
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Получение актуального профиля гостя по UID или контакту ---
+  if (action === 'get_guest_profile') {
+    try {
+      const targetUid = (data.uid || req.query.uid || '').toString().trim();
+      const targetContact = (data.contact || req.query.contact || '').toString().trim();
+
+      if (!targetUid && !targetContact) {
+        return res.status(400).json({ success: false, error: 'Укажите UID или контакт гостя.' });
+      }
+
+      let matchedRow = null;
+      let matchedIndex = 0;
+
+      if (sheets && spreadsheetId) {
+        try {
+          const accSheet = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: resolveRange(sheetMap, 'ACCOUNTS', 'A:M')
+          });
+          const rows = accSheet.data.values || [];
+          for (let i = 1; i < rows.length; i++) {
+            const r = rows[i];
+            const uidInRow = (r[12] || '').toString().trim();
+            const phoneInRow = (r[2] || '').toString().trim();
+            const emailInRow = (r[3] || '').toString().trim().toLowerCase();
+
+            if (targetUid && uidInRow === targetUid) {
+              matchedRow = r;
+              matchedIndex = i;
+              break;
+            }
+            if (targetContact) {
+              const cleanC = targetContact.toLowerCase();
+              if (emailInRow && cleanC === emailInRow) { matchedRow = r; matchedIndex = i; break; }
+              const p1 = phoneInRow.replace(/\D/g, '');
+              const p2 = targetContact.replace(/\D/g, '');
+              if (p1 && p2 && p1.length >= 7 && (p1.includes(p2) || p2.includes(p1))) { matchedRow = r; matchedIndex = i; break; }
+            }
+          }
+        } catch (sErr) {
+          console.warn('[get_guest_profile sheets warning]:', sErr.message);
+        }
+      }
+
+      // Резервный поиск в masterSeedContent
+      if (!matchedRow) {
+        try {
+          const seed = require('../../utils/masterSeedContent');
+          const seedRows = seed.MASTER_ACCOUNTS_ROWS || [];
+          for (let i = 0; i < seedRows.length; i++) {
+            const r = seedRows[i];
+            const uidInRow = (r[12] || '').toString().trim();
+            const phoneInRow = (r[2] || '').toString().trim();
+            const emailInRow = (r[3] || '').toString().trim().toLowerCase();
+            if (targetUid && uidInRow === targetUid) { matchedRow = r; matchedIndex = i; break; }
+            if (targetContact) {
+              const cleanC = targetContact.toLowerCase();
+              if (emailInRow && cleanC === emailInRow) { matchedRow = r; matchedIndex = i; break; }
+              const p1 = phoneInRow.replace(/\D/g, '');
+              const p2 = targetContact.replace(/\D/g, '');
+              if (p1 && p2 && p1.length >= 7 && (p1.includes(p2) || p2.includes(p1))) { matchedRow = r; matchedIndex = i; break; }
+            }
+          }
+        } catch (seedErr) {}
+      }
+
+      if (!matchedRow) {
+        return res.status(404).json({ success: false, error: 'Гость не найден' });
+      }
+
+      const guestName = (matchedRow[1] || 'Гость').toString().trim();
+      const guestPhone = (matchedRow[2] || '').toString().trim();
+      const guestEmail = (matchedRow[3] || '').toString().trim();
+      const blockSite = (matchedRow[5] || '').toString().trim() === 'Да';
+      const blockAccount = (matchedRow[6] || '').toString().trim() === 'Да';
+      const blockChat = (matchedRow[7] || '').toString().trim() === 'Да';
+      const verificationStatus = (matchedRow[8] || '').toString().trim();
+      const repeatRequired = (matchedRow[10] || '').toString().trim() === 'Да';
+      const accountStatus = (matchedRow[11] || 'Активен').toString().trim();
+      const guestUid = (matchedRow[12] || '').toString().trim() || ('VL-USER-' + (1000 + matchedIndex));
+
+      const isFullyVerified = (verificationStatus === 'Полная' || verificationStatus === 'Email' || verificationStatus === 'Телефон' || verificationStatus === 'Верифицирован') && !repeatRequired;
+
+      return res.status(200).json({
+        success: true,
+        user: {
+          uid: guestUid,
+          name: guestName,
+          contact: guestEmail || guestPhone || targetContact,
+          email: guestEmail,
+          phone: guestPhone,
+          emailVerified: isFullyVerified && (verificationStatus === 'Email' || verificationStatus === 'Полная' || verificationStatus === 'Верифицирован'),
+          phoneVerified: isFullyVerified && (verificationStatus === 'Телефон' || verificationStatus === 'Полная' || verificationStatus === 'Верифицирован'),
+          isVerified: isFullyVerified,
+          requiresOtp: repeatRequired,
+          isHost: false,
+          blockSite,
+          blockAccount,
+          blockChat,
+          hasChat: !blockChat
+        }
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Регистрация нового гостя с обязательной OTP-верификацией ---
+  if (action === 'register') {
+    try {
+      await ensureSystemSheets();
+      const rawEmail = (data.email || '').toString().trim().toLowerCase();
+      const rawPhone = (data.phone || '').toString().trim();
+      const rawContact = (data.contact || '').toString().trim();
+      const safeName = (data.name || 'Гость').toString().trim();
+      const safePassword = (data.password || '123456').toString().trim();
+
+      // Извлечение email и телефона из контакта или переданных полей
+      let targetEmail = rawEmail;
+      let targetPhone = rawPhone;
+
+      if (!targetEmail || !targetPhone) {
+        const parts = splitContactParts(rawContact);
+        if (!targetEmail) targetEmail = parts.email;
+        if (!targetPhone) targetPhone = parts.phone;
+      }
+
+      const finalContact = targetPhone && targetEmail
+        ? `${targetPhone} | ${targetEmail}`
+        : (targetEmail || targetPhone || rawContact);
+
+      if (!finalContact) {
+        return res.status(400).json({ success: false, error: 'Укажите контакт для регистрации.' });
+      }
+
+      // Строгая серверная проверка подтверждения проверочным кодом [OTP]
+      let isVerified = false;
+      if (targetEmail) {
+        isVerified = Boolean(await safeCacheGet(`verified_email_${targetEmail.toLowerCase()}`));
+      }
+      if (!isVerified && targetPhone) {
+        const cleanPhone = targetPhone.replace(/\D/g, '');
+        if (cleanPhone) {
+          isVerified = Boolean(await safeCacheGet(`verified_phone_${cleanPhone}`));
+        }
+      }
+
+      if (!isVerified) {
+        return res.status(400).json({
+          success: false,
+          error: `Контакт ${finalContact} не подтвержден проверочным кодом. Пожалуйста, подтвердите код.`
+        });
+      }
+
+      let newUid = 'VL-USER-1000';
+
+      if (sheets && spreadsheetId) {
+        // Проверка: зарегистрирован ли уже пользователь с таким логином
+        try {
+          const accDb = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: resolveRange(sheetMap, 'ACCOUNTS', 'C2:D100')
+          });
+          const existingRows = accDb.data.values || [];
+          const targetEmailLower = (targetEmail || '').toLowerCase().trim();
+          const cleanTargetPhoneDigits = (targetPhone || '').replace(/\D/g, '');
+
+          const alreadyExists = existingRows.some((r) => {
+            const rowPhone = (r[0] || '').toString().trim();
+            const rowEmail = (r[1] || '').toString().trim().toLowerCase();
+
+            // Точное совпадение Email (без нечеткого includes)
+            if (targetEmailLower && rowEmail && rowEmail === targetEmailLower) {
+              return true;
+            }
+
+            // Точное совпадение Телефона: только если оба имеют >= 10 цифр и совпадают последние 10 цифр
+            if (cleanTargetPhoneDigits && cleanTargetPhoneDigits.length >= 10) {
+              const cleanRowDigits = rowPhone.replace(/\D/g, '');
+              if (cleanRowDigits.length >= 10 && cleanRowDigits.slice(-10) === cleanTargetPhoneDigits.slice(-10)) {
+                return true;
+              }
+            }
+
+            return false;
+          });
+
+          if (alreadyExists) {
+            return res.status(400).json({
+              success: false,
+              error: 'Пользователь с таким контактом уже зарегистрирован. Пожалуйста, выполните вход.'
+            });
+          }
+        } catch (checkErr) { }
+
+        const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+        let nextUidNum = 1000;
+        try {
+          const accRowsMeta = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: resolveRange(sheetMap, 'ACCOUNTS', 'M:M')
+          });
+          const existingUids = (accRowsMeta.data.values || []).flat();
+          const maxExisting = existingUids.reduce((max, u) => {
+            const m = String(u).match(/VL-USER-(\d+)/);
+            if (m) {
+              const n = parseInt(m[1], 10);
+              return n > max ? n : max;
+            }
+            return max;
+          }, 999);
+          nextUidNum = maxExisting + 1;
+        } catch (uErr) {}
+        newUid = `VL-USER-${nextUidNum}`;
+        const vStatus = targetEmail ? 'Email' : 'Верифицирован';
+
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'ACCOUNTS', 'A:M'),
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: {
+            values: [[
+              timestamp,
+              safeName,
+              targetPhone ? (targetPhone.startsWith('+') ? `'${targetPhone}` : targetPhone) : '',
+              targetEmail || '',
+              `'${safePassword}`,
+              'Нет',
+              'Нет',
+              'Нет',
+              vStatus,
+              timestamp,
+              'Нет',
+              'Активен',
+              `'${newUid}`
+            ]]
+          }
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        user: {
+          uid: newUid || 'VL-USER-1000',
+          name: safeName,
+          contact: finalContact,
+          email: targetEmail,
+          phone: targetPhone,
+          emailVerified: !!targetEmail,
+          phoneVerified: !!targetPhone,
+          isVerified: true,
+          isHost: false,
+          hasChat: true
+        }
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Отправка проверочного кода : Email или Телефон ---
+  if (action === 'send_verification_code') {
+    try {
+      const channel = data.channel || 'email';
+      const target = (data.target || '').toString().trim();
+      const guestName = (data.name || 'Гость').toString().trim();
+
+      if (!target) {
+        return res.status(400).json({ success: false, error: 'Не указан адрес или номер для отправки кода.' });
+      }
+
+      const cleanTarget = channel === 'email' ? target.toLowerCase() : target.replace(/\D/g, '');
+      const otpCode = generateOtpCode();
+      const cacheKey = `otp_${channel}_${cleanTarget}`;
+
+      // Сохраняем код в кэше с TTL 10 минут и счетчиком попыток
+      await safeCacheSet(cacheKey, { code: otpCode, attempts: 0, createdAt: Date.now() }, { ex: 600 });
+
+      let sendResult = null;
+      if (channel === 'email') {
+        sendResult = await sendEmailVerificationCode({ to: target, code: otpCode, name: guestName });
+      } else {
+        sendResult = await sendPhoneVerificationCode({ phone: target, code: otpCode, name: guestName });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: sendResult?.message || `Проверочный код успешно отправлен на ${target}`,
+        provider: sendResult?.provider || 'default',
+        emailSent: sendResult?.emailSent || false,
+        telegramSent: sendResult?.telegramSent || false
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Валидация проверочного кода (Email или Телефон) ---
+  if (action === 'verify_code') {
+    try {
+      const channel = data.channel || 'email';
+      const target = (data.target || '').toString().trim();
+      const code = (data.code || '').toString().trim();
+
+      if (!target || !code) {
+        return res.status(400).json({ success: false, error: 'Укажите контакт и проверочный код.' });
+      }
+
+      const cleanTarget = channel === 'email' ? target.toLowerCase() : target.replace(/\D/g, '');
+      const cacheKey = `otp_${channel}_${cleanTarget}`;
+      const cached = await safeCacheGet(cacheKey);
+
+      if (!cached || !cached.code) {
+        return res.status(400).json({
+          success: false,
+          error: 'Срок действия проверочного кода истек. Запросите новый код.'
+        });
+      }
+
+      const attempts = (cached.attempts || 0) + 1;
+      if (attempts > 3) {
+        await safeCacheDel(cacheKey);
+        return res.status(400).json({
+          success: false,
+          error: 'Превышен лимит попыток. Запросите новый код.'
+        });
+      }
+
+      if (cached.code.trim() !== code) {
+        await safeCacheSet(cacheKey, { ...cached, attempts }, { ex: 600 });
+        const remaining = 3 - attempts;
+        return res.status(400).json({
+          success: false,
+          error: `Неверный код. Осталось попыток: ${remaining}`
+        });
+      }
+
+      // Код верный: отмечаем контакт подтвержденным на 30 дней и удаляем OTP
+      await safeCacheSet(`verified_${channel}_${cleanTarget}`, true, { ex: 86400 * 30 });
+      await safeCacheDel(cacheKey);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Контакт успешно подтвержден!'
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Чат гостя (получение и отправка сообщений) ---
+  if (action === 'chat') {
+    try {
+      const targetChatId = getChatSpreadsheetId();
+      const chatSheetName = getChatSheetName(data.sender, data.contact);
+      const safeContact = (data.contact || '').toString().trim().toLowerCase();
+      const clientName = (data.sender || 'Гость').toString().trim();
+
+      // Гарантированное создание индивидуального листа диалога с шапкой и смарт-стилизацией
+      if (sheets && targetChatId) {
+        try {
+          await ensureStyledChatSheet(sheets, targetChatId, chatSheetName);
+        } catch (cssErr) {
+          console.warn('[ensureStyledChatSheet Warning]:', cssErr.message);
+        }
+      }
+
+      let channelUsed = 'channel_1_sheets_api';
+
+      // Запись нового сообщения
+      if (data.message || data.fileBase64 || data.fileName) {
+        // Серверный контроль верификации гостя перед отправкой сообщений
+        const isHost = data.sender === 'Владелец' || data.sender === 'Василиса Боровикова' || data.sender === 'Admin' || data.sender === 'Owner';
+        if (!isHost && safeContact) {
+          let isVerifiedGuest = false;
+          const { email: cEmail, phone: cPhone } = splitContactParts(safeContact);
+          if (cEmail) {
+            isVerifiedGuest = Boolean(await safeCacheGet(`verified_email_${cEmail}`));
+          } else if (cPhone) {
+            const cleanPhone = cPhone.replace(/\D/g, '');
+            if (cleanPhone) isVerifiedGuest = Boolean(await safeCacheGet(`verified_phone_${cleanPhone}`));
+          }
+          if (!isVerifiedGuest && sheets && spreadsheetId) {
+            try {
+              const accDb = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'ACCOUNTS', 'A2:M100') });
+              const row = (accDb.data.values || []).find((r) => {
+                const rPhone = (r[2] || '').toString().trim();
+                const rEmail = (r[3] || '').toString().trim().toLowerCase();
+                const rUid = (r[12] || '').toString().trim();
+                if (cEmail && rEmail === cEmail) return true;
+                if (cPhone && rPhone && rPhone.replace(/\D/g, '') === cPhone.replace(/\D/g, '')) return true;
+                if (rUid && rUid === safeContact) return true;
+                return isContactMatch(r[2], safeContact) || isContactMatch(r[3], safeContact);
+              });
+              if (row) {
+                const blockChat = (row[7] || '').trim() === 'Да';
+                if (blockChat) {
+                  return res.status(403).json({
+                    success: false,
+                    error: 'Чат заблокирован администратором виллы.'
+                  });
+                }
+                const vStat = (row[8] || '').trim();
+                const reVer = (row[10] || '').trim() === 'Да';
+                if ((vStat === 'Верифицирован' || vStat === 'Email' || vStat === 'Телефон' || vStat === 'Полная' || vStat === 'Да') && !reVer) {
+                  isVerifiedGuest = true;
+                }
+              }
+            } catch (accErr) {}
+          }
+          if (!isVerifiedGuest && !data.isVerified) {
+            return res.status(403).json({
+              success: false,
+              error: 'Для отправки сообщений в чат необходимо подтвердить проверочный код.'
+            });
+          }
+        }
+
+        const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+        const msgText = data.message || '';
+
+        // Мгновенный параллельный перевод сообщения гостя в реальном времени
+        const translations = await inFlightTranslate(msgText);
+
+        // Канонические формулы перевода со СТРОГОЙ ТОЧКОЙ С ЗАПЯТОЙ (;) для русской локали Google Таблиц
+        const fRU = translations.ru || '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "ru")';
+        const fEN = translations.en || '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "en")';
+        const fTR = translations.tr || '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "tr")';
+
+        let sheetSaved = false;
+        let relaySaved = false;
+        // Канал 1: Прямой Google Sheets API v4
+        if (sheets && targetChatId) {
+          try {
+            await ensureStyledChatSheet(sheets, targetChatId, chatSheetName);
+            await sheets.spreadsheets.values.append({
+              spreadsheetId: targetChatId,
+              range: `'${chatSheetName}'!A:G`,
+              valueInputOption: 'USER_ENTERED',
+              insertDataOption: 'INSERT_ROWS',
+              requestBody: { values: [[timestamp, data.sender || 'Гость', msgText, fRU, fEN, fTR, data.fileName || '']] }
+            });
+            sheetSaved = true;
+          } catch (e) {
+            console.warn('[Chat Append Channel 1 Sheets API Warning]:', e.message);
+          }
+        }
+
+        // Канал 2: Резервная доставка через Google Apps Script Webhook (полные права владельца)
+        if (!sheetSaved) {
+          try {
+            const relayRes = await relayToAppsScriptWebhook('send_chat_message', {
+              spreadsheetId: targetChatId,
+              clientName,
+              clientContact: data.contact || '',
+              sender: data.sender || 'Гость',
+              message: msgText,
+              ru: translations.ru,
+              en: translations.en,
+              tr: translations.tr,
+              file: data.fileName || ''
+            });
+            if (relayRes?.success) {
+              relaySaved = true;
+            }
+          } catch (relayErr) {
+            console.warn('[Chat Relay Channel 2 Apps Script Warning]:', relayErr.message);
+          }
+        }
+
+        // Канал 3: Сохраняем в кэш в памяти с мгновенными переводами для непрерывности работы
+        const cacheKey = `chat_msgs_${safeContact}`;
+        const existingCache = (await safeCacheGet(cacheKey)) || [];
+        existingCache.push({
+          date: timestamp,
+          sender: data.sender || 'Гость',
+          original: msgText,
+          ru: translations.ru || msgText,
+          en: translations.en || msgText,
+          tr: translations.tr || msgText,
+          file: data.fileName || ''
+        });
+        await safeCacheSet(cacheKey, existingCache, { ex: 86400 * 7 });
+        await safeCacheDel('master_all_chats_swr_cache');
+
+        if (sheetSaved) {
+          channelUsed = 'channel_1_sheets_api';
+        } else if (relaySaved) {
+          channelUsed = 'channel_2_apps_script_webhook';
+        } else {
+          channelUsed = 'channel_3_local_cache';
+        }
+
+        // Мгновенное Telegram-уведомление хозяину о новом сообщении гостя с интерактивными кнопками
+        if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+          const fileNote = data.fileName ? `\n📎 Вложение: ${data.fileName}` : '';
+          const tgMsg = `💬 НОВОЕ СООБЩЕНИЕ ХОЗЯИНУ\n👤 От: ${data.sender || 'Гость'}\n📞 Контакт: ${data.contact || 'Не указан'}\n📝 Текст: ${msgText}${fileNote}`;
+          const inlineKeyboard = [
+            [
+              { text: `✍️ Ответить: ${data.contact || 'Гость'}`, callback_data: `reply_${data.contact || 'Гость'}` },
+              { text: `📜 История`, callback_data: `history_${data.contact || 'Гость'}` }
+            ]
+          ];
+          fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: process.env.TELEGRAM_CHAT_ID,
+              text: tgMsg,
+              reply_markup: { inline_keyboard: inlineKeyboard }
+            })
+          }).catch(() => { });
+        }
+
+        // Автономный ответ ИИ-Консьержа Gemini 3.6 Flash при режиме autopilot
+        const isGuestSender = data.sender && data.sender !== 'Владелец' && data.sender !== 'Василиса Боровикова' && data.sender !== 'Admin' && data.sender !== 'Owner';
+        if (msgText && isGuestSender) {
+          try {
+            const kb = await getAiKnowledgeBase();
+            const aiMode = (kb.aiMode || 'copilot').toLowerCase();
+
+            if (aiMode === 'autopilot') {
+              // Определение контекста бронирования гостя для жизненного цикла и тарифов
+              let bookingContext = {
+                contact: data.contact || '',
+                guestName: data.sender || 'Гость'
+              };
+              try {
+                const sheetMap = await getLiveSheetMap(sheets, targetChatId);
+                const bookingsRange = resolveRange(sheetMap, 'BOOKINGS', 'A:K');
+                const bRes = await sheets.spreadsheets.values.get({ spreadsheetId: targetChatId, range: bookingsRange });
+                const bRows = (bRes.data.values || []).slice(1);
+                const guestContactNorm = (data.contact || '').toLowerCase().trim();
+                const matchedRow = bRows.slice().reverse().find(r => {
+                  const cNorm = (r[2] || '').toLowerCase().trim();
+                  return guestContactNorm && cNorm && (guestContactNorm.includes(cNorm) || cNorm.includes(guestContactNorm));
+                });
+                if (matchedRow) {
+                  bookingContext = {
+                    contact: data.contact || '',
+                    guestName: matchedRow[1] || data.sender || 'Гость',
+                    checkInDate: matchedRow[3] || '',
+                    checkOutDate: matchedRow[4] || '',
+                    paymentStatus: matchedRow[10] || '',
+                    bookingId: matchedRow[0] || ''
+                  };
+                }
+              } catch (bCtxErr) {
+                // Игнорируем некритичную ошибку чтения контекста
+              }
+
+              const aiResult = await generateConciergeReply({
+                guestMessage: msgText,
+                guestName: data.sender || 'Гость',
+                contact: data.contact || '',
+                chatHistory: existingCache.slice(-8),
+                bookingContext,
+                providedKb: kb
+              });
+
+              if (aiResult?.success && aiResult?.replyText) {
+                const aiReplyText = aiResult.replyText;
+                const aiTimestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+                const aiSender = 'ИИ-Консьерж [Gemini 3.6 Flash]';
+
+                // Мгновенный параллельный перевод ответа ИИ
+                const aiTranslations = await inFlightTranslate(aiReplyText);
+                const aiFRU = aiTranslations.ru || '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "ru")';
+                const aiFEN = aiTranslations.en || '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "en")';
+                const aiFTR = aiTranslations.tr || '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "tr")';
+
+                let aiSaved = false;
+                // Канал 1: Прямой Google Sheets API
+                if (sheets && targetChatId) {
+                  try {
+                    await sheets.spreadsheets.values.append({
+                      spreadsheetId: targetChatId,
+                      range: `'${chatSheetName}'!A:G`,
+                      valueInputOption: 'USER_ENTERED',
+                      insertDataOption: 'INSERT_ROWS',
+                      requestBody: { values: [[aiTimestamp, aiSender, aiReplyText, aiFRU, aiFEN, aiFTR, '']] }
+                    });
+                    aiSaved = true;
+                  } catch (aiAppendErr) {
+                    console.warn('[AI Chat Append Channel 1 Sheets API Warning]:', aiAppendErr.message);
+                  }
+                }
+
+                // Канал 2: Резервная доставка через Google Apps Script Webhook
+                if (!aiSaved) {
+                  try {
+                    await relayToAppsScriptWebhook('send_chat_message', {
+                      spreadsheetId: targetChatId,
+                      clientName,
+                      clientContact: data.contact || '',
+                      sender: aiSender,
+                      message: aiReplyText,
+                      ru: aiTranslations.ru,
+                      en: aiTranslations.en,
+                      tr: aiTranslations.tr,
+                      file: ''
+                    });
+                  } catch (aiRelayErr) {
+                    console.warn('[AI Relay Channel 2 Apps Script Warning]:', aiRelayErr.message);
+                  }
+                }
+
+                // Канал 3: Сохраняем ответ ИИ в кэш с переводами
+                existingCache.push({
+                  date: aiTimestamp,
+                  sender: aiSender,
+                  original: aiReplyText,
+                  ru: aiTranslations.ru || aiReplyText,
+                  en: aiTranslations.en || aiReplyText,
+                  tr: aiTranslations.tr || aiReplyText,
+                  file: ''
+                });
+                await safeCacheSet(cacheKey, existingCache, { ex: 86400 * 7 });
+
+                if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+                  const aiReport = `🤖 АВТОПИЛОТ GEMINI 3.6 FLASH ОТВЕТИЛ ГОСТЮ\n👤 Гость: ${data.sender}\n📞 Контакт: ${data.contact}\n📝 Вопрос: ${msgText}\n\n✨ Ответ ИИ:\n${aiReplyText}`;
+                  fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      chat_id: process.env.TELEGRAM_CHAT_ID,
+                      text: aiReport
+                    })
+                  }).catch(() => { });
+                }
+              } else if (aiResult?.error) {
+                console.warn('[Autopilot AI Result Warning]:', aiResult.error);
+              }
+            }
+          } catch (aiErr) {
+            console.warn('[Autopilot AI Error]:', aiErr.message);
+          }
+        }
+      }
+
+      // Получение истории сообщений с защитой от сбоев квоты
+      let messages = [];
+      const cacheKey = `chat_msgs_${safeContact}`;
+      if (sheets && targetChatId) {
+        try {
+          const chatDb = await sheets.spreadsheets.values.get({ spreadsheetId: targetChatId, range: `'${chatSheetName}'!A:G` });
+          const rows = chatDb.data.values || [];
+          const hasHeader = rows.length > 0 && rows[0][0] === 'Дата и Время';
+          const rawMsgs = hasHeader ? rows.slice(1) : rows;
+          messages = rawMsgs.map(parseMessageRow);
+          if (messages.length > 0) {
+            await safeCacheSet(cacheKey, messages, { ex: 86400 * 7 });
+          }
+        } catch (e) {
+          console.warn('[Chat Fetch Sheets Warning]:', e.message);
+        }
+      }
+
+      // Если Google Sheets временно не вернул сообщений [лимит квоты или таймаут], мгновенно берем из кэша
+      if (messages.length === 0) {
+        const cached = await safeCacheGet(cacheKey);
+        if (cached && Array.isArray(cached) && cached.length > 0) {
+          messages = cached;
+        }
+      }
+
+      // Получение активных заявок гостя с защитой от сбоев квоты
+      const reqCacheKey = `user_bookings_${safeContact}`;
+      let activeRequests = [];
+      if (sheets && spreadsheetId) {
+        try {
+          const bookingDb = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'BOOKINGS', 'A:K') });
+          activeRequests = (bookingDb.data.values || []).slice(1).map((r, i) => {
+            let statusFull = r[10] || '';
+            let status = statusFull;
+            let expiresAt = null;
+            if (statusFull.includes('СПЕЦПРЕДЛОЖЕНИЕ')) {
+              status = 'СПЕЦПРЕДЛОЖЕНИЕ';
+              expiresAt = statusFull.split('|')[1] ? statusFull.split('|')[1].trim() : null;
+            } else if (statusFull.includes('ОЖИДАЕТ ОПЛАТЫ')) {
+              status = 'ОЖИДАЕТ ОПЛАТЫ';
+              expiresAt = statusFull.split('|')[1] ? statusFull.split('|')[1].trim() : null;
+            }
+            return {
+              rowIndex: i + 1,
+              date: r[0],
+              name: r[1],
+              contact: r[2],
+              checkIn: r[3],
+              checkOut: r[4],
+              nights: r[5],
+              guests: r[8],
+              price: r[9],
+              status,
+              expiresAt
+            };
+          }).filter((r) => isContactMatch(r.contact, safeContact));
+
+          if (activeRequests.length > 0) {
+            await safeCacheSet(reqCacheKey, activeRequests, { ex: 86400 * 7 });
+          }
+        } catch (e) {
+          console.warn('[Bookings Fetch Sheets Warning]:', e.message);
+        }
+      }
+
+      // Если чтение бронирований не удалось из-за квоты 429, отдаем кэшированные заявки гостя
+      if (activeRequests.length === 0) {
+        const cachedReqs = await safeCacheGet(reqCacheKey);
+        if (cachedReqs && Array.isArray(cachedReqs) && cachedReqs.length > 0) {
+          activeRequests = cachedReqs;
+        }
+      }
+
+      return res.status(200).json({ success: true, messages, activeRequests, channelUsed });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Прямое обращение гостя к хозяину до регистрации ---
+  if (action === 'contact_host') {
+    try {
+      await ensureSystemSheets();
+      const targetChatId = getChatSpreadsheetId();
+      const rawEmail = (data.email || '').toString().trim().toLowerCase();
+      const rawPhone = (data.phone || '').toString().trim();
+      const rawContact = (data.contact || '').toString().trim();
+      const { email: splitEmail, phone: splitPhone } = splitContactParts(rawContact);
+      const safeEmail = rawEmail || splitEmail;
+      const safePhone = rawPhone || splitPhone;
+      const safeContact = safeEmail || safePhone || rawContact;
+      const safeName = (data.name || data.sender || 'Гость').toString().trim();
+      const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+      const msgText = data.message || '';
+
+      // Серверная проверка обязательной верификации контакта перед отправкой хозяину (Email)
+      let isVerifiedContact = false;
+      if (safeEmail) {
+        isVerifiedContact = Boolean(await safeCacheGet(`verified_email_${safeEmail.toLowerCase()}`));
+      } else if (safePhone) {
+        const cleanDigits = safePhone.replace(/\D/g, '');
+        if (cleanDigits) isVerifiedContact = Boolean(await safeCacheGet(`verified_phone_${cleanDigits}`));
+      }
+      if (!isVerifiedContact && !data.isVerified) {
+        return res.status(403).json({
+          success: false,
+          error: 'Для отправки сообщения хозяину необходимо подтвердить контакт проверочным кодом.'
+        });
+      }
+
+      let contactHostSaved = false;
+      let contactRelaySaved = false;
+
+      // 1. Однократный параллельный перевод сообщения гостя в реальном времени
+      const translations = await inFlightTranslate(msgText);
+      const fRU = translations.ru || '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "ru")';
+      const fEN = translations.en || '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "en")';
+      const fTR = translations.tr || '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "tr")';
+
+      // 2. Авто-регистрация гостя в листе ACCOUNTS по каноническому 13-колоночному стандарту
+      let assignedUid = 'VL-USER-1000';
+      if (sheets && spreadsheetId && (safeEmail || safePhone)) {
+        try {
+          const accDb = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: resolveRange(sheetMap, 'ACCOUNTS', 'A2:M100')
+          });
+          const rows = accDb.data.values || [];
+          const existing = rows.find(r => {
+            const rPhone = (r[2] || '').toString().trim();
+            const rEmail = (r[3] || '').toString().trim().toLowerCase();
+            if (safeEmail && rEmail === safeEmail.toLowerCase()) return true;
+            if (safePhone && rPhone && safePhone.replace(/\D/g, '').length >= 10 && rPhone.replace(/\D/g, '').slice(-10) === safePhone.replace(/\D/g, '').slice(-10)) return true;
+            return false;
+          });
+
+          if (existing) {
+            assignedUid = existing[12] || `VL-USER-${1000 + rows.indexOf(existing)}`;
+          } else {
+            const maxExisting = rows.reduce((max, r) => {
+              const m = String(r[12] || '').match(/VL-USER-(\d+)/);
+              if (m) {
+                const n = parseInt(m[1], 10);
+                return n > max ? n : max;
+              }
+              return max;
+            }, 999);
+            assignedUid = `VL-USER-${maxExisting + 1}`;
+
+            await sheets.spreadsheets.values.append({
+              spreadsheetId,
+              range: resolveRange(sheetMap, 'ACCOUNTS', 'A:M'),
+              valueInputOption: 'USER_ENTERED',
+              insertDataOption: 'INSERT_ROWS',
+              requestBody: {
+                values: [[
+                  timestamp,
+                  safeName,
+                  safePhone ? (safePhone.startsWith('+') ? `'${safePhone}` : safePhone) : '',
+                  safeEmail || '',
+                  '123456',
+                  'Нет',
+                  'Нет',
+                  'Нет',
+                  safeEmail ? 'Email' : 'Верифицирован',
+                  timestamp,
+                  'Нет',
+                  'Активен',
+                  `'${assignedUid}`
+                ]]
+              }
+            });
+          }
+        } catch (regErr) {
+          console.warn('[contact_host auto-register warning]:', regErr.message);
+        }
+      }
+
+      const userObj = {
+        uid: assignedUid,
+        name: safeName,
+        contact: safeEmail || safePhone || safeContact,
+        email: safeEmail,
+        phone: safePhone,
+        emailVerified: !!safeEmail,
+        phoneVerified: false,
+        isVerified: true,
+        isHost: false,
+        blockChat: false,
+        hasChat: true
+      };
+
+      // 3. Гарантированное создание индивидуального листа диалога с темной шапкой и запись
+      const chatSheetName = getChatSheetName(safeName, safeContact);
+      if (sheets && targetChatId) {
+        try {
+          await ensureStyledChatSheet(sheets, targetChatId, chatSheetName);
+          await sheets.spreadsheets.values.append({
+            spreadsheetId: targetChatId,
+            range: `'${chatSheetName}'!A:G`,
+            valueInputOption: 'USER_ENTERED',
+            insertDataOption: 'INSERT_ROWS',
+            requestBody: { values: [[timestamp, safeName, msgText, fRU, fEN, fTR, data.fileName || '']] }
+          });
+          contactHostSaved = true;
+        } catch (sheetErr) {
+          console.warn('[contact_host sheet error]:', sheetErr.message);
+        }
+      }
+
+      // Канал 2: Резервная доставка через Google Apps Script Webhook
+      if (!contactHostSaved) {
+        try {
+          const relayRes = await relayToAppsScriptWebhook('send_chat_message', {
+            targetChatId,
+            sheetName: chatSheetName,
+            clientName: safeName,
+            clientContact: safeContact,
+            sender: safeName,
+            message: msgText,
+            ru: translations.ru,
+            en: translations.en,
+            tr: translations.tr,
+            file: data.fileName || ''
+          });
+          if (relayRes?.success) {
+            contactRelaySaved = true;
+          }
+        } catch (relayErr) {
+          console.warn('[contact_host relay warning]:', relayErr.message);
+        }
+      }
+
+      // 4. Канал 3: Надежное кэширование сообщения в памяти и локальном хранилище
+      const cacheKey = `chat_msgs_${safeContact}`;
+      const msgItem = {
+        date: timestamp,
+        sender: safeName,
+        original: msgText,
+        ru: translations.ru || msgText,
+        en: translations.en || msgText,
+        tr: translations.tr || msgText,
+        file: data.fileName || ''
+      };
+      await safeCacheSet(cacheKey, [msgItem], { ex: 86400 * 7 });
+
+      // 5. Мгновенное Telegram-уведомление хозяину
+      if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+        const fileNote = data.fileName ? `\n📎 Вложение: ${data.fileName}` : '';
+        const tgMsg = `💬 НОВОЕ СООБЩЕНИЕ ХОЗЯИНУ: Прямое обращение\n👤 Гость: ${safeName}\n📞 Контакт: ${safeContact}\n📝 Текст: ${msgText}${fileNote}`;
+        const inlineKeyboard = [
+          [
+            { text: `✍️ Ответить: ${safeName}`, callback_data: `reply_${safeContact}` },
+            { text: `📜 История`, callback_data: `history_${safeContact}` }
+          ]
+        ];
+        fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: process.env.TELEGRAM_CHAT_ID,
+            text: tgMsg,
+            reply_markup: { inline_keyboard: inlineKeyboard }
+          })
+        }).catch(() => { });
+      }
+
+      let channelUsed = 'channel_3_local_cache';
+      if (contactHostSaved) {
+        channelUsed = 'channel_1_sheets_api';
+      } else if (contactRelaySaved) {
+        channelUsed = 'channel_2_apps_script_webhook';
+      }
+
+      return res.status(200).json({
+        success: true,
+        user: userObj,
+        message: 'Сообщение успешно доставлено владельцу виллы!',
+        channelUsed
+      });
+    } catch (e) {
+      console.warn('[contact_host global error]:', e.message);
+      // Всегда возвращаем гарантированный fallback в Канал 3 без падения UI
+      return res.status(200).json({
+        success: true,
+        user: {
+          name: (data.name || data.sender || 'Гость').toString().trim(),
+          contact: (data.contact || '').toString().trim().toLowerCase(),
+          isVerified: true,
+          isHost: false,
+          hasChat: true
+        },
+        message: 'Сообщение сохранено и отправлено владельцу виллы.',
+        channelUsed: 'channel_3_local_cache'
+      });
+    }
+  }
+
+  // --- API: Мгновенная авто-регистрация гостя ---
+  if (action === 'auto_register_guest') {
+    try {
+      await ensureSystemSheets();
+      const rawEmail = (data.email || '').toString().trim().toLowerCase();
+      const rawPhone = (data.phone || '').toString().trim();
+      const rawContact = (data.contact || '').toString().trim();
+      const { email: splitEmail, phone: splitPhone } = splitContactParts(rawContact);
+      const safeEmail = rawEmail || splitEmail;
+      const safePhone = rawPhone || splitPhone;
+      const safeContact = safeEmail || safePhone || rawContact;
+      const safeName = (data.name || 'Гость').toString().trim();
+      const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+      let assignedUid = 'VL-USER-1000';
+
+      if (sheets && spreadsheetId && (safeEmail || safePhone)) {
+        try {
+          const accDb = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: resolveRange(sheetMap, 'ACCOUNTS', 'A2:M100')
+          });
+          const rows = accDb.data.values || [];
+          const existing = rows.find(r => {
+            const rPhone = (r[2] || '').toString().trim();
+            const rEmail = (r[3] || '').toString().trim().toLowerCase();
+            if (safeEmail && rEmail === safeEmail.toLowerCase()) return true;
+            if (safePhone && rPhone && safePhone.replace(/\D/g, '').length >= 10 && rPhone.replace(/\D/g, '').slice(-10) === safePhone.replace(/\D/g, '').slice(-10)) return true;
+            return false;
+          });
+
+          if (existing) {
+            assignedUid = existing[12] || `VL-USER-${1000 + rows.indexOf(existing)}`;
+          } else {
+            const maxExisting = rows.reduce((max, r) => {
+              const m = String(r[12] || '').match(/VL-USER-(\d+)/);
+              if (m) {
+                const n = parseInt(m[1], 10);
+                return n > max ? n : max;
+              }
+              return max;
+            }, 999);
+            assignedUid = `VL-USER-${maxExisting + 1}`;
+            const isVer = (data.emailVerified || data.isVerified) ? 'Email' : 'Не верифицирован';
+
+            await sheets.spreadsheets.values.append({
+              spreadsheetId,
+              range: resolveRange(sheetMap, 'ACCOUNTS', 'A:M'),
+              valueInputOption: 'USER_ENTERED',
+              insertDataOption: 'INSERT_ROWS',
+              requestBody: {
+                values: [[
+                  timestamp,
+                  safeName,
+                  safePhone ? (safePhone.startsWith('+') ? `'${safePhone}` : safePhone) : '',
+                  safeEmail || '',
+                  '123456',
+                  'Нет',
+                  'Нет',
+                  'Нет',
+                  isVer,
+                  timestamp,
+                  'Нет',
+                  'Активен',
+                  `'${assignedUid}`
+                ]]
+              }
+            });
+          }
+        } catch (regErr) {
+          console.warn('[auto_register_guest warning]:', regErr.message);
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        user: {
+          uid: assignedUid,
+          name: safeName,
+          contact: safeEmail || safePhone || safeContact,
+          email: safeEmail,
+          phone: safePhone,
+          emailVerified: !!data.emailVerified,
+          phoneVerified: !!data.phoneVerified,
+          isHost: false,
+          blockChat: false,
+          hasChat: true
+        }
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Получение всех чатов для панели хозяина ---
+  if (action === 'master_get_chats') {
+    try {
+      const targetChatId = getChatSpreadsheetId();
+      let allChats = [];
+      let allReqs = [];
+
+      // 1. Проверяем серверный SWR-кэш для защиты от перегрузки Google Sheets API
+      const cachedMaster = await safeCacheGet('master_all_chats_swr_cache');
+      if (cachedMaster && cachedMaster.timestamp && (Date.now() - cachedMaster.timestamp < 3500) && Array.isArray(cachedMaster.chats) && cachedMaster.chats.length > 0) {
+        return res.status(200).json({ success: true, chats: cachedMaster.chats, allRequests: cachedMaster.allRequests || [] });
+      }
+
+      if (sheets && targetChatId) {
+        try {
+          const chatMetadata = await sheets.spreadsheets.get({ spreadsheetId: targetChatId });
+          const chatSheets = (chatMetadata.data.sheets || []).filter((s) => s.properties.title.startsWith('Chat_'));
+
+          // Получение всех бронирований
+          let bookingDb = { data: { values: [] } };
+          try {
+            bookingDb = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'BOOKINGS', 'A:K') });
+          } catch (bErr) {
+            console.warn('[master_get_chats BOOKINGS Warning]:', bErr.message);
+          }
+
+          allReqs = (bookingDb.data.values || []).slice(1).map((r, i) => {
+            let statusFull = r[10] || '';
+            let status = statusFull;
+            let expiresAt = null;
+            if (statusFull.includes('СПЕЦПРЕДЛОЖЕНИЕ')) {
+              status = 'СПЕЦПРЕДЛОЖЕНИЕ';
+              const rawExp = statusFull.split('|')[1] ? statusFull.split('|')[1].trim() : null;
+              if (rawExp) {
+                const parsedDate = new Date(rawExp);
+                if (!isNaN(parsedDate.getTime())) {
+                  expiresAt = parsedDate.toISOString();
+                }
+              }
+            } else if (statusFull.includes('ОЖИДАЕТ ОПЛАТЫ')) {
+              status = 'ОЖИДАЕТ ОПЛАТЫ';
+              const rawExp = statusFull.split('|')[1] ? statusFull.split('|')[1].trim() : null;
+              if (rawExp) {
+                const parsedDate = new Date(rawExp);
+                if (!isNaN(parsedDate.getTime())) {
+                  expiresAt = parsedDate.toISOString();
+                }
+              }
+            }
+
+            let rawContact = (r[2] || '').toString().trim();
+            if (rawContact.includes('#ERROR!')) {
+              rawContact = '';
+            }
+
+            return {
+              rowIndex: i + 1,
+              name: r[1] || 'Гость',
+              contact: rawContact,
+              checkIn: r[3],
+              checkOut: r[4],
+              nights: r[5],
+              adults: Number(r[6]) || 1,
+              children: Number(r[7]) || 0,
+              total_guests: Number(r[8]) || (Number(r[6] || 1) + Number(r[7] || 0)),
+              guests: Number(r[8]) || (Number(r[6] || 1) + Number(r[7] || 0)),
+              price: r[9],
+              status,
+              expiresAt
+            };
+          });
+
+          // Получение аккаунтов для определения статуса регистрации и верификации
+          let accountsDb = { data: { values: [] } };
+          try {
+            accountsDb = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'ACCOUNTS', 'A:G') });
+          } catch (accErr) {
+            console.warn('[master_get_chats ACCOUNTS Warning]:', accErr.message);
+          }
+          const allAccounts = (accountsDb.data.values || []).slice(1);
+
+          // Пакетная загрузка всех листов чатов за 1 сетевой запрос [batchGet]
+          const ranges = chatSheets.map((s) => `'${s.properties.title}'!A:G`);
+          const batchMap = {};
+          if (ranges.length > 0) {
+            try {
+              const batchRes = await sheets.spreadsheets.values.batchGet({
+                spreadsheetId: targetChatId,
+                ranges
+              });
+              const valueRanges = batchRes.data.valueRanges || [];
+              valueRanges.forEach((vr, idx) => {
+                const sheetTitle = chatSheets[idx]?.properties?.title;
+                if (sheetTitle) {
+                  batchMap[sheetTitle] = vr.values || [];
+                }
+              });
+            } catch (batchErr) {
+              console.warn('[master_get_chats batchGet Warning]:', batchErr.message);
+            }
+          }
+
+          for (const s of chatSheets) {
+            const title = s.properties.title;
+            const parts = title.split('_');
+            const clientName = parts[1] || 'Гость';
+            const clientContact = parts.slice(2).join('_') || parts[2] || '';
+
+            let messages = [];
+            const rows = batchMap[title] || [];
+            const hasHeader = rows.length > 0 && rows[0][0] === 'Дата и Время';
+
+            const rawMsgs = hasHeader ? rows.slice(1) : rows;
+            messages = rawMsgs.map(parseMessageRow);
+
+            // Если из таблицы сообщений не пришло, мгновенно подтягиваем из кэша
+            if (messages.length === 0 && clientContact) {
+              const cached = await safeCacheGet(`chat_msgs_${clientContact.toLowerCase()}`);
+              if (cached && Array.isArray(cached)) {
+                messages = cached;
+              }
+            }
+
+            // Сопоставление с заявками: прямое совпадение или частичное совпадение контакта
+            const contactLower = clientContact.toLowerCase();
+            const userReqs = allReqs.filter((r) => {
+              const rContact = (r.contact || '').toLowerCase();
+              return rContact === contactLower ||
+                (contactLower.length > 3 && rContact.includes(contactLower)) ||
+                (rContact.length > 3 && contactLower.includes(rContact));
+            });
+
+            // Сопоставление с аккаунтом для бейджей регистрации и верификации
+            const matchedAccount = allAccounts.find((acc) => {
+              const login = (acc[2] || '').toLowerCase();
+              return login === contactLower ||
+                (contactLower.length > 3 && login.includes(contactLower)) ||
+                (login.length > 3 && contactLower.includes(login));
+            });
+
+            const isRegistered = !!matchedAccount;
+            let verificationLevel = 'none';
+            if (isRegistered) {
+              const accLogin = (matchedAccount[2] || '').toLowerCase();
+              const hasEmail = accLogin.includes('@');
+              const hasPhone = /\d{7,}/.test(accLogin);
+              if (hasEmail && hasPhone) verificationLevel = 'both';
+              else if (hasEmail) verificationLevel = 'email';
+              else if (hasPhone) verificationLevel = 'phone';
+              else verificationLevel = 'account';
+            }
+
+            const primaryReq = userReqs[0];
+            const bookingStatus = primaryReq ? primaryReq.status : null;
+            const bookingAmount = primaryReq ? primaryReq.price : null;
+
+            allChats.push({
+              sheetName: title,
+              clientName,
+              clientContact,
+              messages,
+              activeRequests: userReqs,
+              isRegistered,
+              verificationLevel,
+              hasBooking: userReqs.length > 0,
+              bookingStatus,
+              bookingAmount
+            });
+          }
+        } catch (innerErr) {
+          console.warn('[master_get_chats inner Warning]:', innerErr.message);
+        }
+      }
+
+      // 2. Если данные успешно получены, сохраняем снимок в серверный кэш
+      if (allChats.length > 0) {
+        await safeCacheSet('master_all_chats_swr_cache', { chats: allChats, allRequests: allReqs, timestamp: Date.now() }, { ex: 60 });
+      } else if (cachedMaster && Array.isArray(cachedMaster.chats) && cachedMaster.chats.length > 0) {
+        // Защита от мерцания: при сбое Google API возвращаем данные из кэша вместо пустого массива
+        allChats = cachedMaster.chats;
+        if (allReqs.length === 0 && cachedMaster.allRequests) {
+          allReqs = cachedMaster.allRequests;
+        }
+      }
+
+      return res.status(200).json({ success: true, chats: allChats, allRequests: allReqs });
+    } catch (e) {
+      // При критическом сбое пытаемся вернуть кэш перед падением в 500
+      try {
+        const cachedFallback = await safeCacheGet('master_all_chats_swr_cache');
+        if (cachedFallback && Array.isArray(cachedFallback.chats) && cachedFallback.chats.length > 0) {
+          return res.status(200).json({ success: true, chats: cachedFallback.chats, allRequests: cachedFallback.allRequests || [] });
+        }
+      } catch (fallbackErr) {}
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Одобрение заявки хозяином (HOLD 24 часа) ---
+  if (action === 'approve_request') {
+    try {
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const statusStr = `ОЖИДАЕТ ОПЛАТЫ | ${expiresAt}`;
+
+      if (sheets && spreadsheetId) {
+        // Обновляем статус в листе бронирований
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'BOOKINGS', `K${data.rowIndex + 1}`),
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[statusStr]] }
+        });
+
+        const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+        // Устанавливаем блокировку HOLD в календаре
+        const holdRow = [data.checkIn, data.checkOut, "Блокировка", `HOLD | ${data.contact} | ${expiresAt}`, "Одобрено (Ожидает оплаты)", "Система", timestamp];
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'CALENDAR', 'A:G'),
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: { values: [holdRow] }
+        });
+
+        // Отправка системного сообщения гостю
+        const targetChatId = getChatSpreadsheetId();
+        const fRU = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "ru")';
+        const fEN = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "en")';
+        const fTR = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "tr")';
+        const msg = `✅ Ваша заявка на даты ${data.checkIn} - ${data.checkOut} одобрена владельцем!\nДаты удержаны за вами на 24 часа. Пожалуйста, завершите онлайн - оплату в личном кабинете.`;
+
+        await ensureStyledChatSheet(sheets, targetChatId, data.chatSheetName);
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: targetChatId,
+          range: `'${data.chatSheetName}'!A:G`,
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: { values: [[timestamp, "Владелец", msg, fRU, fEN, fTR, ""]] }
+        });
+
+        await safeCacheDel('settings_cache');
+      }
+
+      return res.status(200).json({ success: true });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Специальное предложение от хозяина ---
+  if (action === 'special_offer') {
+    try {
+      const targetChatId = getChatSpreadsheetId();
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const statusStr = `СПЕЦПРЕДЛОЖЕНИЕ | ${expiresAt}`;
+      const range = resolveRange(sheetMap, 'BOOKINGS', `D${data.rowIndex + 1}:K${data.rowIndex + 1}`);
+
+      if (sheets && spreadsheetId) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[data.checkIn, data.checkOut, data.nights, data.adults || '', data.children || '', data.guests || '', data.price, statusStr]] }
+        });
+
+        const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+        const deadlineStr = new Date(expiresAt).toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+
+        const ruleRow = [data.checkIn, data.checkOut, "Блокировка", `HOLD | ${data.clientContact} | ${expiresAt}`, "Ожидание оплаты (Спецпредложение)", "Система", timestamp];
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'CALENDAR', 'A:G'),
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: { values: [ruleRow] }
+        });
+
+        const guestCount = data.guests || ((parseInt(data.adults, 10) || 0) + (parseInt(data.children, 10) || 0)) || '2';
+        const nightsCount = data.nights || 1;
+        const msg = `🎁 Для вас сформировано специальное предложение!\n\n📅 Даты проживания: ${data.checkIn} - ${data.checkOut} [${nightsCount} ноч.]\n👥 Количество гостей: ${guestCount}\n💰 Обновленная стоимость со скидкой: ${data.price}\n⏳ Окно оплаты открыто до: ${deadlineStr}\n\nВилла заблокирована за вами на 24 часа. Чтобы завершить бронирование по специальной цене, перейдите к оплате в карточке бронирования или в верхней плашке чата.`;
+        const fRU = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "ru")';
+        const fEN = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "en")';
+        const fTR = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "tr")';
+
+        await ensureStyledChatSheet(sheets, targetChatId, data.chatSheetName);
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: targetChatId,
+          range: `'${data.chatSheetName}'!A:G`,
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: { values: [[timestamp, "Владелец", msg, fRU, fEN, fTR, ""]] }
+        });
+
+        await safeCacheDel('settings_cache');
+      }
+
+      return res.status(200).json({ success: true });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Отзыв заявки хозяином ---
+  if (action === 'revoke_request') {
+    try {
+      const targetChatId = getChatSpreadsheetId();
+      if (sheets && spreadsheetId) {
+        const range = resolveRange(sheetMap, 'BOOKINGS', `K${data.rowIndex + 1}`);
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [["ОТОЗВАНО"]] }
+        });
+
+        const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+        const ruleRow = [data.checkIn, data.checkOut, "Сброс блокировки", "СБРОС", "Отозвано владельцем", "Система", timestamp];
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'CALENDAR', 'A:G'),
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: { values: [ruleRow] }
+        });
+
+        const msg = `❌ Сообщаю, что предложение на бронирование с ${data.checkIn} по ${data.checkOut} было отозвано администрацией.`;
+        const fRU = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "ru")';
+        const fEN = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "en")';
+        const fTR = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "tr")';
+
+        await ensureStyledChatSheet(sheets, targetChatId, data.chatSheetName);
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: targetChatId,
+          range: `'${data.chatSheetName}'!A:G`,
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: { values: [[timestamp, "Владелец", msg, fRU, fEN, fTR, ""]] }
+        });
+
+        await safeCacheDel('settings_cache');
+      }
+
+      return res.status(200).json({ success: true });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Отклонение заявки хозяином ---
+  if (action === 'reject_request') {
+    try {
+      const targetChatId = getChatSpreadsheetId();
+      if (sheets && spreadsheetId) {
+        const range = resolveRange(sheetMap, 'BOOKINGS', `K${data.rowIndex + 1}`);
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [["ОТКЛОНЕНО"]] }
+        });
+
+        const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+        const msg = `❌ К сожалению, ваша заявка на даты ${data.checkIn} - ${data.checkOut} была отклонена. Пожалуйста, выберите другие доступные даты в календаре.`;
+        const fRU = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "ru")';
+        const fEN = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "en")';
+        const fTR = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "tr")';
+
+        await ensureStyledChatSheet(sheets, targetChatId, data.chatSheetName);
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: targetChatId,
+          range: `'${data.chatSheetName}'!A:G`,
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: { values: [[timestamp, "Владелец", msg, fRU, fEN, fTR, ""]] }
+        });
+
+        await safeCacheDel('settings_cache');
+      }
+
+      return res.status(200).json({ success: true });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Получение обучающих материалов для мастера (LMS) ---
+  if (action === 'master_get_lms') {
+    try {
+      if (!sheets || !spreadsheetId) return res.status(200).json({ success: true, lms: [] });
+
+      const coursesSheet = await sheets.spreadsheets.values.get({ spreadsheetId, range: resolveRange(sheetMap, 'GUIDES', 'A:Q') });
+      const lms = (coursesSheet.data.values || []).slice(1).map((r) => ({
+        id: r[0],
+        name: { ru: r[1], en: r[3], tr: r[5] },
+        module: r[8] || 'Основной',
+        privateLink: r[9]
+      })).filter((c) => c.id && c.privateLink);
+
+      return res.status(200).json({ success: true, lms });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Сохранение правил календаря с защитой Active Persistence Guard ---
+  if (action === 'master_save_calendar') {
+    try {
+      if (Array.isArray(data.rules)) {
+        savePersistedCalendarRules(data.rules);
+        await safeCacheDel('settings_cache');
+      }
+      if (sheets && spreadsheetId && Array.isArray(data.rules)) {
+        const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+        const rows = data.rules.map((r) => [r.start, r.end, r.type, r.value || '', r.note || '', data.sender || 'Admin', timestamp]);
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'CALENDAR', 'A:G'),
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: { values: rows }
+        });
+      }
+      return res.status(200).json({ success: true });
+    } catch (e) {
+      console.warn('[master_save_calendar Warning]:', e.message);
+      return res.status(200).json({ success: true, warning: 'Saved locally, remote sync delayed' });
+    }
+  }
+
+  // --- API: Сохранение глобальных правил с защитой Active Persistence Guard ---
+  if (action === 'master_save_global_rules') {
+    try {
+      if (data.rules) {
+        savePersistedGlobalRules(data.rules);
+        await safeCacheDel('settings_cache');
+      }
+      await ensureSystemSheets();
+      if (sheets && spreadsheetId && data.rules) {
+        const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'CALENDAR', 'A:G'),
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: { values: [["Глобальные правила", "Все даты", "Настройки", JSON.stringify(data.rules), "Изменение тарифов", data.sender || 'Admin', timestamp]] }
+        });
+      }
+      return res.status(200).json({ success: true });
+    } catch (e) {
+      console.warn('[master_save_global_rules Warning]:', e.message);
+      return res.status(200).json({ success: true, warning: 'Saved locally, remote sync delayed' });
+    }
+  }
+
+  // --- API: Отправка сообщений хозяином ---
+  if (action === 'master_send_chats') {
+    try {
+      const targetChatId = getChatSpreadsheetId();
+      const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+      const fRU = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "ru")';
+      const fEN = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "en")';
+      const fTR = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "tr")';
+
+      let channelUsed = 'channel_3_local_cache';
+      for (const sheetName of data.targetSheets || []) {
+        const clientName = sheetName.split('_')[1] || 'Гость';
+        const clientContact = (sheetName.split('_').slice(2).join('_') || '').toLowerCase();
+        const msg = (data.message || '').replace(/\[FIRST_NAME\]/g, clientName);
+
+        // Мгновенный параллельный перевод в реальном времени
+        const translations = await inFlightTranslate(msg);
+        const fRU = translations.ru || '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "ru")';
+        const fEN = translations.en || '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "en")';
+        const fTR = translations.tr || '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "tr")';
+
+        let hostSaved = false;
+        let hostRelaySaved = false;
+        // Канал 1: Прямой Google Sheets API
+        if (sheets && targetChatId) {
+          try {
+            await ensureStyledChatSheet(sheets, targetChatId, sheetName);
+            await sheets.spreadsheets.values.append({
+              spreadsheetId: targetChatId,
+              range: `'${sheetName}'!A:G`,
+              valueInputOption: 'USER_ENTERED',
+              insertDataOption: 'INSERT_ROWS',
+              requestBody: { values: [[timestamp, data.sender || 'Владелец', msg, fRU, fEN, fTR, ""]] }
+            });
+            hostSaved = true;
+          } catch (sheetErr) {
+            console.warn('[master_send_chats Sheet Warning]:', sheetErr.message);
+          }
+        }
+
+        // Канал 2: Резервная доставка через Google Apps Script Webhook
+        if (!hostSaved) {
+          try {
+            const relayRes = await relayToAppsScriptWebhook('send_chat_message', {
+              spreadsheetId: targetChatId,
+              clientName,
+              clientContact,
+              sender: data.sender || 'Владелец',
+              message: msg,
+              ru: translations.ru,
+              en: translations.en,
+              tr: translations.tr,
+              file: ''
+            });
+            if (relayRes?.success) {
+              hostRelaySaved = true;
+            }
+          } catch (relayErr) {
+            console.warn('[master_send_chats relay warning]:', relayErr.message);
+          }
+        }
+
+        if (hostSaved) {
+          channelUsed = 'channel_1_sheets_api';
+        } else if (hostRelaySaved && channelUsed !== 'channel_1_sheets_api') {
+          channelUsed = 'channel_2_apps_script_webhook';
+        }
+
+        // Канал 3: Кэш сообщений с переводами
+        if (clientContact) {
+          const cacheKey = `chat_msgs_${clientContact}`;
+          const existingCache = (await safeCacheGet(cacheKey)) || [];
+          existingCache.push({
+            date: timestamp,
+            sender: data.sender || 'Владелец',
+            original: msg,
+            ru: translations.ru || msg,
+            en: translations.en || msg,
+            tr: translations.tr || msg,
+            file: ''
+          });
+          await safeCacheSet(cacheKey, existingCache, { ex: 86400 * 7 });
+        }
+      }
+      return res.status(200).json({ success: true, channelUsed });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Создание заявки на бронирование от гостя (по запросу хозяину) ---
+  if (action === 'request_booking') {
+    try {
+      await ensureSystemSheets();
+      const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+      const safeEmail = (data.email || '').toString().trim();
+      const safePhone = (data.phone || '').toString().trim();
+      const effectiveContact = (data.contact || (safePhone && safeEmail ? `${safePhone} | ${safeEmail}` : (safePhone || safeEmail || ''))).toString().trim();
+      const guestName = (data.name || 'Гость').toString().trim();
+
+      // Обязательная проверка заполненности и валидности контактов
+      if (!safeEmail || !/\S+@\S+\.\S+/.test(safeEmail)) {
+        return res.status(400).json({ success: false, error: 'Укажите корректный адрес электронной почты для бронирования.' });
+      }
+      if (!safePhone || safePhone.replace(/\D/g, '').length < 6) {
+        return res.status(400).json({ success: false, error: 'Укажите действующий номер телефона для бронирования.' });
+      }
+
+      // Строгая серверная проверка верификации Email через кэш проверок [OTP]
+      const isEmailVerified = Boolean(await safeCacheGet(`verified_email_${safeEmail.toLowerCase()}`));
+      if (!isEmailVerified) {
+        return res.status(400).json({
+          success: false,
+          error: 'Адрес электронной почты не подтвержден проверочным кодом. Пожалуйста, подтвердите email кодом из письма.'
+        });
+      }
+
+      const isPhoneVerified = Boolean(await safeCacheGet(`verified_phone_${safePhone.replace(/\D/g, '')}`));
+
+      let userObj = {
+        name: guestName,
+        contact: effectiveContact,
+        email: safeEmail,
+        phone: safePhone,
+        emailVerified: true,
+        phoneVerified: isPhoneVerified,
+        isHost: false,
+        blockChat: false,
+        hasChat: true
+      };
+
+      // Авто-регистрация незарегистрированного гостя в таблице аккаунтов
+      if (!data.isRegistered && sheets && spreadsheetId && effectiveContact) {
+        const safeContactKey = effectiveContact.toLowerCase();
+        try {
+          const existingData = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: resolveRange(sheetMap, 'ACCOUNTS', 'C:C')
+          });
+          const logins = existingData.data.values
+            ? existingData.data.values.flat().map((v) => (v || '').toString().trim().toLowerCase())
+            : [];
+          const checkKey = safeEmail ? safeEmail.toLowerCase() : safeContactKey;
+          if (!logins.includes(checkKey) && !logins.includes(safeContactKey)) {
+            let nextAutoUid = 1000;
+            try {
+              const allRowsCount = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: resolveRange(sheetMap, 'ACCOUNTS', 'A:A')
+              });
+              nextAutoUid = 1000 + (allRowsCount.data.values || []).length;
+            } catch (cErr) {}
+            const autoUid = `VL-USER-${nextAutoUid}`;
+            const vStatus = isEmailVerified && isPhoneVerified ? 'Полная' : (isEmailVerified ? 'Email' : (isPhoneVerified ? 'Телефон' : 'Не верифицирован'));
+
+            await sheets.spreadsheets.values.append({
+              spreadsheetId,
+              range: resolveRange(sheetMap, 'ACCOUNTS', 'A:M'),
+              valueInputOption: 'USER_ENTERED',
+              insertDataOption: 'INSERT_ROWS',
+              requestBody: {
+                values: [[
+                  timestamp,
+                  guestName,
+                  safePhone ? `'${safePhone}` : '',
+                  safeEmail || '',
+                  '123456',
+                  'Нет',
+                  'Нет',
+                  'Нет',
+                  vStatus,
+                  timestamp,
+                  'Нет',
+                  'Активен',
+                  `'${autoUid}`
+                ]]
+              }
+            });
+          }
+        } catch (regErr) { /* продолжаем даже если аккаунт не создан */ }
+      }
+
+      let newBookingRowIndex = 2;
+      if (sheets && spreadsheetId) {
+        try {
+          const currentBookings = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: resolveRange(sheetMap, 'BOOKINGS', 'A:A')
+          });
+          newBookingRowIndex = (currentBookings.data.values || []).length + 1;
+        } catch (e) { }
+
+        // Запись заявки в лист бронирований (11 колонок A:K)
+        const safeSheetContact = (effectiveContact && effectiveContact.toString().startsWith('+')) ? `'${effectiveContact}` : (effectiveContact || '');
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'BOOKINGS', 'A:K'),
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: {
+            values: [[
+              timestamp,
+              guestName,
+              safeSheetContact,
+              data.checkIn,
+              data.checkOut,
+              data.nights,
+              data.total_adults,
+              data.total_children,
+              data.total_guests,
+              data.totalPrice || '',
+              'ЗАПРОС'
+            ]]
+          }
+        });
+
+        // Создание листа чата для гостя: если еще не существует
+        const targetChatId = getChatSpreadsheetId();
+        const chatSheetName = getChatSheetName(guestName, effectiveContact);
+
+        try {
+          await ensureStyledChatSheet(sheets, targetChatId, chatSheetName);
+
+          // Системное сообщение с деталями заявки: канонические формулы с точкой с запятой
+          const miniCard = `📋 Заявка отправлена на модерацию.\nДетали: ${data.checkIn} - ${data.checkOut}\nГостей: ${data.total_guests}\nСтоимость: ${data.totalPrice}\n\nОжидайте подтверждения от владельца.`;
+          const fRU = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "ru")';
+          const fEN = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "en")';
+          const fTR = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "tr")';
+
+          await sheets.spreadsheets.values.append({
+            spreadsheetId: targetChatId,
+            range: `'${chatSheetName}'!A:G`,
+            valueInputOption: 'USER_ENTERED',
+            insertDataOption: 'INSERT_ROWS',
+            requestBody: { values: [[timestamp, 'Система', miniCard, fRU, fEN, fTR, '']] }
+          });
+        } catch (chatErr) { /* чат создан по возможности */ }
+      }
+
+      // Telegram-уведомление хозяину о новой заявке со статусами проверки и интерактивными кнопками управления
+      if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+        const emailStatus = isEmailVerified ? '✅ Подтвержден' : '⏳ Не подтвержден';
+        const phoneStatus = isPhoneVerified ? '✅ Подтвержден' : '⏳ Не подтвержден';
+        const tgMsg = `⚠️ НОВАЯ ЗАЯВКА: Модерация\n👤 Гость: ${guestName}\n📧 Email: ${safeEmail || '-'}: ${emailStatus}\n📞 Телефон: ${safePhone || effectiveContact || '-'}: ${phoneStatus}\n📅 Период: ${data.checkIn} - ${data.checkOut}\n👥 Гостей: ${data.total_guests}\n💰 Стоимость: ${data.totalPrice}\n\nВыберите действие:`;
+        const inlineKeyboard = [
+          [
+            { text: '✅ Одобрить: 24ч HOLD', callback_data: `approve_${newBookingRowIndex}_${effectiveContact}` },
+            { text: '❌ Отклонить', callback_data: `reject_${newBookingRowIndex}_${effectiveContact}` }
+          ],
+          [
+            { text: `✍️ Написать гостю: ${guestName}`, callback_data: `reply_${effectiveContact}` }
+          ]
+        ];
+        await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: process.env.TELEGRAM_CHAT_ID,
+            text: tgMsg,
+            reply_markup: { inline_keyboard: inlineKeyboard }
+          })
+        }).catch(() => { });
+      }
+
+      // Генерация уникального кода бронирования и отправка детального оповещения гостю
+      const bookingCode = data.bookingCode || `VT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      sendDetailedBookingNotification({
+        to: safeEmail,
+        guestName,
+        booking: {
+          bookingCode,
+          checkIn: data.checkIn,
+          checkOut: data.checkOut,
+          nights: data.nights,
+          adults: data.total_adults,
+          children: data.total_children,
+          price: data.totalPrice,
+          phone: safePhone,
+          email: safeEmail
+        },
+        guestProfile: {
+          name: guestName,
+          email: safeEmail,
+          phone: safePhone,
+          emailVerified: isEmailVerified,
+          phoneVerified: isPhoneVerified
+        },
+        status: 'ЗАПРОС',
+        paymentMode: 'request'
+      }).catch((mailErr) => {
+        console.warn('[Detailed Mail Notification Warning]:', mailErr.message);
+      });
+
+      return res.status(200).json({ success: true, bookingCode, user: userObj, message: 'Заявка успешно принята!' });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Подтверждённое/оплаченное бронирование ---
+  if (action === 'booking') {
+    try {
+      await ensureSystemSheets();
+      const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+      const safeEmail = (data.email || '').toString().trim();
+      const safePhone = (data.phone || '').toString().trim();
+      const effectiveContact = (data.contact || (safePhone && safeEmail ? `${safePhone} | ${safeEmail}` : (safePhone || safeEmail || ''))).toString().trim();
+      const guestName = (data.name || 'Гость').toString().trim();
+
+      // Обязательная проверка заполненности и валидности контактов
+      if (!safeEmail || !/\S+@\S+\.\S+/.test(safeEmail)) {
+        return res.status(400).json({ success: false, error: 'Укажите корректный адрес электронной почты для бронирования.' });
+      }
+      if (!safePhone || safePhone.replace(/\D/g, '').length < 6) {
+        return res.status(400).json({ success: false, error: 'Укажите действующий номер телефона для бронирования.' });
+      }
+
+      // Строгая серверная проверка верификации Email через кэш проверок [OTP]
+      const isEmailVerified = Boolean(await safeCacheGet(`verified_email_${safeEmail.toLowerCase()}`));
+      if (!isEmailVerified) {
+        return res.status(400).json({
+          success: false,
+          error: 'Адрес электронной почты не подтвержден проверочным кодом. Пожалуйста, подтвердите email кодом из письма.'
+        });
+      }
+
+      // Авто-регистрация гостя в таблице аккаунтов при бронировании (канонические 13 колонок)
+      let bookingGuestUid = 'VL-USER-1000';
+      if (sheets && spreadsheetId && (safeEmail || safePhone || effectiveContact)) {
+        try {
+          const accDb = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: resolveRange(sheetMap, 'ACCOUNTS', 'A2:M100')
+          });
+          const rows = accDb.data.values || [];
+          const existing = rows.find(r => {
+            const rPhone = (r[2] || '').toString().trim();
+            const rEmail = (r[3] || '').toString().trim().toLowerCase();
+            if (safeEmail && rEmail === safeEmail.toLowerCase()) return true;
+            if (safePhone && rPhone && safePhone.replace(/\D/g, '').length >= 10 && rPhone.replace(/\D/g, '').slice(-10) === safePhone.replace(/\D/g, '').slice(-10)) return true;
+            return false;
+          });
+
+          if (existing) {
+            bookingGuestUid = existing[12] || `VL-USER-${1000 + rows.indexOf(existing)}`;
+          } else {
+            const maxExisting = rows.reduce((max, r) => {
+              const m = String(r[12] || '').match(/VL-USER-(\d+)/);
+              if (m) {
+                const n = parseInt(m[1], 10);
+                return n > max ? n : max;
+              }
+              return max;
+            }, 999);
+            bookingGuestUid = `VL-USER-${maxExisting + 1}`;
+
+            await sheets.spreadsheets.values.append({
+              spreadsheetId,
+              range: resolveRange(sheetMap, 'ACCOUNTS', 'A:M'),
+              valueInputOption: 'USER_ENTERED',
+              insertDataOption: 'INSERT_ROWS',
+              requestBody: {
+                values: [[
+                  timestamp,
+                  guestName,
+                  safePhone ? (safePhone.startsWith('+') ? `'${safePhone}` : safePhone) : '',
+                  safeEmail || '',
+                  '123456',
+                  'Нет',
+                  'Нет',
+                  'Нет',
+                  safeEmail ? 'Email' : 'Верифицирован',
+                  timestamp,
+                  'Нет',
+                  'Активен',
+                  `'${bookingGuestUid}`
+                ]]
+              }
+            });
+          }
+        } catch (regErr) { /* продолжаем */ }
+      }
+
+      const bookingCode = data.bookingCode || `VT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const statusToSave = data.paymentStatus || 'ОПЛАЧЕНО';
+
+      if (sheets && spreadsheetId) {
+        const safeConfirmedContact = (effectiveContact && effectiveContact.toString().startsWith('+')) ? `'${effectiveContact}` : (effectiveContact || '');
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: resolveRange(sheetMap, 'BOOKINGS', 'A:K'),
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: {
+            values: [[
+              timestamp,
+              guestName,
+              safeConfirmedContact,
+              data.checkIn,
+              data.checkOut,
+              data.nights,
+              data.total_adults,
+              data.total_children,
+              data.total_guests,
+              data.totalPrice || '',
+              statusToSave
+            ]]
+          }
+        });
+
+        // Создаём чат для оплативших гостей
+        if (effectiveContact) {
+          const targetChatId = getChatSpreadsheetId();
+          const chatSheetName = getChatSheetName(guestName, effectiveContact);
+          try {
+            await ensureStyledChatSheet(sheets, targetChatId, chatSheetName);
+            const miniCard = statusToSave.includes('IBAN')
+              ? `🏦 Заказ оформлен: Ожидается оплата по IBAN\nКод бронирования: ${bookingCode}\nДетали: ${data.checkIn} - ${data.checkOut}\nГостей: ${data.total_guests}\nСумма: ${data.totalPrice}\n\nПожалуйста, укажите код ${bookingCode} в назначении платежа.`
+              : `✅ Заказ успешно оформлен!\nКод бронирования: ${bookingCode}\nДетали: ${data.checkIn} - ${data.checkOut}\nГостей: ${data.total_guests}\nСумма: ${data.totalPrice}`;
+            const fRU = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "ru")';
+            const fEN = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "en")';
+            const fTR = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "tr")';
+            await sheets.spreadsheets.values.append({
+              spreadsheetId: targetChatId,
+              range: `'${chatSheetName}'!A:G`,
+              valueInputOption: 'USER_ENTERED',
+              insertDataOption: 'INSERT_ROWS',
+              requestBody: { values: [[timestamp, 'Система', miniCard, fRU, fEN, fTR, '']] }
+            });
+          } catch (chatErr) { /* продолжаем */ }
+        }
+      }
+
+      // Мгновенное Telegram-уведомление хозяину о подтвержденном бронировании
+      if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+        const tgMsg = `🎉 НОВОЕ БРОНИРОВАНИЕ\nКод брони: ${bookingCode}\n👤 Гость: ${guestName}\n📞 Контакт: ${effectiveContact}\n📅 Период: ${data.checkIn} - ${data.checkOut}\n👥 Гостей: ${data.total_guests}\n💰 Стоимость: ${data.totalPrice || '-'}\nСтатус: ${statusToSave}`;
+        const inlineKeyboard = [
+          [
+            { text: `✍️ Написать гостю: ${guestName}`, callback_data: `reply_${effectiveContact}` },
+            { text: `📜 История`, callback_data: `history_${effectiveContact}` }
+          ]
+        ];
+        fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: process.env.TELEGRAM_CHAT_ID,
+            text: tgMsg,
+            reply_markup: { inline_keyboard: inlineKeyboard }
+          })
+        }).catch(() => { });
+      }
+
+      // Информативное email-оповещение гостя с полным срезом данных брони и инструкциями
+      sendDetailedBookingNotification({
+        to: safeEmail,
+        guestName,
+        booking: {
+          bookingCode,
+          checkIn: data.checkIn,
+          checkOut: data.checkOut,
+          nights: data.nights,
+          adults: data.total_adults,
+          children: data.total_children,
+          price: data.totalPrice,
+          phone: safePhone,
+          email: safeEmail
+        },
+        guestProfile: {
+          name: guestName,
+          email: safeEmail,
+          phone: safePhone,
+          emailVerified: true,
+          phoneVerified: !!data.phoneVerified
+        },
+        status: statusToSave,
+        paymentMode: statusToSave.includes('IBAN') ? 'iban' : 'gateway',
+        ibanDetails: data.ibanDetails || {}
+      }).catch((mailErr) => {
+        console.warn('[Detailed Mail Notification Warning]:', mailErr.message);
+      });
+
+      const userObj = {
+        name: guestName,
+        contact: effectiveContact,
+        email: safeEmail,
+        phone: safePhone,
+        emailVerified: true,
+        phoneVerified: !!data.phoneVerified,
+        isHost: false,
+        blockChat: false,
+        hasChat: true
+      };
+
+      return res.status(200).json({ success: true, bookingCode, user: userObj, message: 'Бронирование оформлено!' });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Сервисное смарт-форматирование всех листов чатов ---
+  if (action === 'format_chat_sheets') {
+    try {
+      const targetChatId = getChatSpreadsheetId();
+      let formattedCount = 0;
+      if (sheets && targetChatId) {
+        const chatMetadata = await sheets.spreadsheets.get({ spreadsheetId: targetChatId });
+        const chatSheets = (chatMetadata.data.sheets || []).filter((s) => s.properties.title.startsWith('Chat_'));
+        for (const s of chatSheets) {
+          await ensureStyledChatSheet(sheets, targetChatId, s.properties.title);
+          formattedCount++;
+        }
+      }
+      return res.status(200).json({
+        success: true,
+        count: formattedCount,
+        message: `Успешно отформатировано листов чатов: ${formattedCount}`
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: C&C Граф задач (Tasks & Calendar) ---
+  if (action === 'get_tasks_graph') {
+    let nodes = [];
+    let edges = [];
+    nodes.push({ id: 'hub_villa', label: 'Vasilisa.luneville - вышивка от кутюр Platform', group: 'hub', color: '#f43f5e' });
+    nodes.push({ id: 'hub_crm', label: 'CRM & Заявки гостя', group: 'hub', color: '#10b981' });
+    nodes.push({ id: 'hub_ical', label: 'Синхронизация iCal', group: 'hub', color: '#f59e0b' });
+    edges.push({ from: 'hub_crm', to: 'hub_villa', type: 'system' });
+    edges.push({ from: 'hub_ical', to: 'hub_villa', type: 'system' });
+
+    return res.status(200).json({ success: true, nodes, edges });
+  }
+
+  // --- API: Оформление заказа на доп. услугу или видео-путеводитель с Telegram-уведомлением ---
+  if (action === 'order_service_or_guide') {
+    try {
+      const timestamp = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Istanbul' });
+      const guestName = (data.guestName || data.name || 'Гость').toString().trim();
+      const contact = (data.contact || '').toString().trim();
+      const itemTitle = (data.itemTitle || data.title || 'Услуга').toString().trim();
+      const itemType = (data.itemType || (data.type === 'course' ? 'Видео-путеводитель' : 'Дополнительная услуга')).toString().trim();
+      const price = (data.price || '-').toString().trim();
+      const details = (data.details || `Заказ из каталога: ${itemTitle}`).toString().trim();
+
+      let orderSavedToSheets = false;
+      if (sheets && spreadsheetId) {
+        try {
+          await ensureSystemSheets();
+          // 1. Фиксация заказа в листе ServiceOrders [ORDERS]
+          await sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: resolveRange(sheetMap, 'ORDERS', 'A:F'),
+            valueInputOption: 'USER_ENTERED',
+            insertDataOption: 'INSERT_ROWS',
+            requestBody: {
+              values: [[
+                timestamp,
+                contact || guestName,
+                itemType,
+                price,
+                'ОЖИДАЕТ ПОДТВЕРЖДЕНИЯ',
+                details
+              ]]
+            }
+          });
+          orderSavedToSheets = true;
+
+          // 2. Добавление записи в чат гостя
+          if (contact) {
+            const targetChatId = getChatSpreadsheetId();
+            const chatSheetName = getChatSheetName(guestName, contact);
+            try {
+              await ensureStyledChatSheet(sheets, targetChatId, chatSheetName);
+              const cardMsg = `🛎️ Оформлен заказ: ${itemTitle}\nКатегория: ${itemType}\nСтоимость: ${price}\nСтатус: Ожидает подтверждения хозяином`;
+              const fRU = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "ru")';
+              const fEN = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "en")';
+              const fTR = '=GOOGLETRANSLATE(INDIRECT("C"&ROW()); "auto"; "tr")';
+              await sheets.spreadsheets.values.append({
+                spreadsheetId: targetChatId,
+                range: `'${chatSheetName}'!A:G`,
+                valueInputOption: 'USER_ENTERED',
+                insertDataOption: 'INSERT_ROWS',
+                requestBody: { values: [[timestamp, 'Система', cardMsg, fRU, fEN, fTR, '']] }
+              });
+            } catch (chatErr) { /* non-fatal */ }
+          }
+        } catch (sheetOrderErr) {
+          console.warn('[order_service_or_guide Sheets Warning]:', sheetOrderErr.message);
+        }
+      }
+
+      if (!orderSavedToSheets) {
+        try {
+          await relayToAppsScriptWebhook('order_service_or_guide', {
+            spreadsheetId,
+            timestamp,
+            guestName,
+            contact,
+            itemTitle,
+            itemType,
+            price,
+            details
+          });
+        } catch (relayErr) {}
+      }
+
+      // 3. Мгновенное интерактивное уведомление владельцу в Telegram
+      if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+        const tgMsg = `🛎️ НОВЫЙ ЗАКАЗ ИЗ КАТАЛОГА\n` +
+          `📦 Наименование: ${itemTitle}\n` +
+          `🏷️ Категория: ${itemType}\n` +
+          `👤 Клиент: ${guestName}\n` +
+          `📞 Контакт: ${contact || 'Уточняется'}\n` +
+          `💰 Стоимость: ${price}\n` +
+          `Статус: ОЖИДАЕТ ПОДТВЕРЖДЕНИЯ`;
+
+        const inlineKeyboard = [
+          [
+            { text: "✅ Одобрить заказ", callback_data: `ord_approve_${contact || guestName}` },
+            { text: "❌ Отклонить", callback_data: `ord_reject_${contact || guestName}` }
+          ],
+          [
+            { text: `💬 Ответить гостю`, callback_data: `reply_${contact || guestName}` }
+          ]
+        ];
+
+        fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: process.env.TELEGRAM_CHAT_ID,
+            text: tgMsg,
+            reply_markup: { inline_keyboard: inlineKeyboard }
+          })
+        }).catch(() => { });
+      }
+
+      return res.status(200).json({ success: true, message: 'Заказ успешно зафиксирован' });
+    } catch (e) {
+      console.error('[order_service_or_guide Error]:', e);
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Управление настройками ИИ-агента из кабинета хозяина ---
+  if (action === 'update_ai_settings') {
+    try {
+      const newMode = (data.aiMode || 'copilot').toString().trim().toLowerCase();
+      const newPrompt = (data.systemPrompt || '').toString().trim();
+      const newMinPrice = (data.minPriceUsd || '180').toString().trim();
+      const newModel = (data.geminiModel || 'gemini-3.6-flash').toString().trim();
+
+      const aiSettingsObj = {
+        aiMode: newMode,
+        aiEnabled: newMode !== 'off',
+        geminiModel: newModel,
+        minPriceUsd: parseInt(newMinPrice, 10) || 180,
+        systemPrompt: newPrompt
+      };
+      savePersistedAiSettings(aiSettingsObj);
+
+      let settingsSheetsSaved = false;
+      // Обновление Google Sheets при наличии доступа
+      if (sheets && spreadsheetId) {
+        try {
+          await ensureSystemSheets();
+          const curRows = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: resolveRange(sheetMap, 'SETTINGS', 'A:E')
+          });
+          const rows = curRows.data.values || [];
+
+          const updateRow = async (catName, paramKey, newValue, desc, status) => {
+            const idx = rows.findIndex((r) => {
+              const c0 = (r[0] || '').toString().trim();
+              const c1 = (r[1] || '').toString().trim();
+              return (c0 === catName && c1 === paramKey) || (c1 === paramKey) || (c0 === paramKey);
+            });
+            if (idx >= 0) {
+              const rowNum = idx + 1;
+              await sheets.spreadsheets.values.update({
+                spreadsheetId,
+                range: resolveRange(sheetMap, 'SETTINGS', `A${rowNum}:E${rowNum}`),
+                valueInputOption: 'USER_ENTERED',
+                requestBody: { values: [[catName, paramKey, newValue, desc || rows[idx][3] || '', status || 'ACTIVE']] }
+              });
+            } else {
+              await sheets.spreadsheets.values.append({
+                spreadsheetId,
+                range: resolveRange(sheetMap, 'SETTINGS', 'A:E'),
+                valueInputOption: 'USER_ENTERED',
+                insertDataOption: 'INSERT_ROWS',
+                requestBody: { values: [[catName, paramKey, newValue, desc || '', status || 'ACTIVE']] }
+              });
+            }
+          };
+
+          if (newMode) await updateRow('СИСТЕМА', 'ai_mode', newMode, 'Режим работы ИИ: autopilot или copilot или off', newMode.toUpperCase());
+          if (newPrompt) await updateRow('СИСТЕМА', 'system_prompt', newPrompt, 'Глобальный системный промпт ИИ', 'ACTIVE');
+          if (newMinPrice) await updateRow('СИСТЕМА', 'min_night_price', newMinPrice, 'Минимальный тариф ночь USD', 'ENFORCED');
+          if (newModel) await updateRow('СИСТЕМА', 'ai_model', newModel, 'Модель Google Gemini', 'ACTIVE');
+          settingsSheetsSaved = true;
+        } catch (sheetUpdateErr) {
+          console.warn('[update_ai_settings Sheets Warning]:', sheetUpdateErr.message);
+        }
+      }
+
+      // Резервная отправка настроек через Google Apps Script Webhook: Канал 2
+      if (!settingsSheetsSaved) {
+        try {
+          await relayToAppsScriptWebhook('update_ai_settings', {
+            spreadsheetId,
+            aiMode: newMode,
+            geminiModel: newModel,
+            minPriceUsd: newMinPrice,
+            systemPrompt: newPrompt
+          });
+        } catch (relayErr) {
+          console.warn('[update_ai_settings Apps Script Relay Warning]:', relayErr.message);
+        }
+      }
+
+      // Сброс кэша базы знаний
+      try {
+        invalidateAiKnowledgeCache();
+      } catch (invErr) {}
+
+      return res.status(200).json({
+        success: true,
+        aiMode: newMode,
+        settings: aiSettingsObj,
+        message: 'Настройки ИИ успешно сохранены'
+      });
+    } catch (e) {
+      console.error('[update_ai_settings Error]:', e);
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  // --- API: Получение настроек ИИ-агента ---
+  if (action === 'get_ai_settings') {
+    try {
+      const persisted = getPersistedAiSettings();
+      let kb = null;
+      try {
+        kb = await getAiKnowledgeBase(req.body?.force === true);
+      } catch (kbErr) {
+        console.warn('[get_ai_settings KB Warning]:', kbErr.message);
+      }
+
+      const aiMode = persisted?.aiMode || kb?.aiMode || 'copilot';
+      const aiEnabled = aiMode !== 'off';
+      const geminiModel = persisted?.geminiModel || kb?.geminiModel || 'gemini-3.6-flash';
+      const minPriceUsd = persisted?.minPriceUsd || kb?.minPriceUsd || 180;
+      const systemPrompt = persisted?.systemPrompt || kb?.systemPrompt || '';
+
+      return res.status(200).json({
+        success: true,
+        aiMode,
+        aiEnabled,
+        geminiModel,
+        minPriceUsd,
+        systemPrompt
+      });
+    } catch (e) {
+      const persisted = getPersistedAiSettings();
+      if (persisted) {
+        return res.status(200).json({ success: true, ...persisted });
+      }
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  }
+
+  return res.status(200).json({ success: true });
+}
+

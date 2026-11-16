@@ -1,0 +1,262 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "🚀 1. Запуск Dev Сервера - Next.js Dev: Порт 3000",
+      "type": "shell",
+      "command": "npm run dev",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "nextjs",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*compiling.*",
+          "endsPattern": ".*Ready in.*"
+        }
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
+      "label": "🧹 2. Освободить Порт 3000 - Free Port 3000",
+      "type": "shell",
+      "command": "pwsh -ExecutionPolicy Bypass -Command \"Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }\"",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "📦 3. Сборка Проекта - Next.js Build [Проверка компиляции]",
+      "type": "shell",
+      "command": "npm run build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "⚡ 4. Запуск Продакшн Сервера - Next.js Start",
+      "type": "shell",
+      "command": "npm start",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "📥 5. Установка Зависимостей - npm install",
+      "type": "shell",
+      "command": "npm install",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "📱 6. Полный Стартер PowerShell - deploy_and_run.ps1",
+      "type": "shell",
+      "command": "pwsh -ExecutionPolicy Bypass -File .\\deploy_and_run.ps1",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "💾 7. Зафиксировать текущие таблицы как эталон SSOT на сайте",
+      "type": "shell",
+      "command": "node scripts/save-master-seed.js",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "📊 8. Синхронизация Контента - Google Sheets -> content.json",
+      "type": "shell",
+      "command": "node scripts/sync-content.js",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "🏛️ 9. Инициализация CRM Таблиц - Google Sheets [15 листов]",
+      "type": "shell",
+      "command": "node scripts/init-google-sheets.js",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "🛠️ 10. Восстановить все удаленные листы и контент из эталона",
+      "type": "shell",
+      "command": "node scripts/restore-sheets.js",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "🗂️ 11. Миграция Листов Google Таблиц на Русские Названия",
+      "type": "shell",
+      "command": "npm run migrate-sheets",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "💾 12. SPARK: Универсальное создание двухуровневого бэкапа и сохранение версии",
+      "type": "shell",
+      "command": "pwsh -ExecutionPolicy Bypass -File .\\create_project_backup.ps1 -ProjectName vasilisa-luneville-couture-platform",
+      "options": {
+        "cwd": "${workspaceFolder}/.."
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "🛡️ 13. SPARK: Зафиксировать новую ступень в Эталонный код для отката",
+      "type": "shell",
+      "command": "pwsh -ExecutionPolicy Bypass -File .\\create_rollback_stage.ps1 -ProjectName vasilisa-luneville-couture-platform",
+      "options": {
+        "cwd": "${workspaceFolder}/.."
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "⏪ 14. SPARK: Восстановить проект из ступени отката [Умный выбор / Последняя по умолчанию]",
+      "type": "shell",
+      "command": "pwsh -ExecutionPolicy Bypass -File .\\restore_rollback_stage.ps1 -ProjectName vasilisa-luneville-couture-platform",
+      "options": {
+        "cwd": "${workspaceFolder}/.."
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "⏸️ 17. Пауза Сайта : pause_site.ps1 -> maintenance.html и middleware.js -> Перевод Vercel в режим обслуживания со статусом HTTP 503",
+      "type": "shell",
+      "command": "pwsh -ExecutionPolicy Bypass -File .\\pause_site.ps1",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "▶️ 18. Возобновление Работы Сайта : resume_site.ps1 -> Удаление заглушки 503 -> Возврат Vercel в боевой режим работы",
+      "type": "shell",
+      "command": "pwsh -ExecutionPolicy Bypass -File .\\resume_site.ps1",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "💾 17. [Git] Зафиксировать все изменения в Git - Commit All",
+      "type": "shell",
+      "command": "git add -A; git commit -m 'chore: синхронизация и сохранение версии репозитория'",
+      "options": {
+        "cwd": "${workspaceFolder}/.."
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "🔄 18. [Глобально] Применить настройки Накопителя ко всем проектам",
+      "type": "shell",
+      "command": "pwsh -ExecutionPolicy Bypass -File .\\apply_settings.ps1",
+      "options": {
+        "cwd": "${workspaceFolder}/../Глобальные настройки проекта (накопитель)"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "🧹 19. [Глобально] Очистить архивные дубли и корень рабочей области",
+      "type": "shell",
+      "command": "pwsh -ExecutionPolicy Bypass -File .\\clean_accumulator_and_root.ps1",
+      "options": {
+        "cwd": "${workspaceFolder}/../Глобальные настройки проекта (накопитель)"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "📦 20. [Глобально] Пересобрать переносной запускатор - Уровень 3",
+      "type": "shell",
+      "command": "pwsh -ExecutionPolicy Bypass -File .\\rebuild_portable_launcher.ps1",
+      "options": {
+        "cwd": "${workspaceFolder}/../Глобальные настройки проекта (накопитель)"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "📥 26. Синхронизация Git Pull : git pull origin main -> Репозиторий GitHub -> Получение свежих коммитов masterSeed и кода",
+      "type": "shell",
+      "command": "git pull origin main",
+      "options": {
+        "cwd": "${workspaceFolder}/.."
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    }
+  ]
+}

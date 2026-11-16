@@ -1,0 +1,57 @@
+{
+  "name": "vasilisa-luneville-couture-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Премиальная платформа аренды виллы Vasilisa.luneville - вышивка от кутюр в стиле Haute Couture с разделением личных кабинетов хозяина и гостя",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "init-db": "node scripts/init-google-sheets.js",
+    "sync-content": "node scripts/sync-content.js",
+    "migrate-sheets": "node scripts/migrate-sheets-structure.js",
+    "restore-sheets": "node scripts/restore-sheets.js",
+    "save-master-seed": "node scripts/save-master-seed.js"
+  },
+  "dependencies": {
+    "@paypal/checkout-server-sdk": "^1.0.3",
+    "@vercel/kv": "^3.0.0",
+    "axios": "^1.19.0",
+    "bcryptjs": "^3.0.3",
+    "date-fns": "^2.30.0",
+    "dotenv": "^17.4.2",
+    "force-graph": "^1.51.4",
+    "googleapis": "^174.0.0",
+    "iyzipay": "^2.0.69",
+    "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^1.28.0",
+    "next": "14.2.35",
+    "node-ical": "^0.27.1",
+    "pdfkit": "^0.19.1",
+    "qrcode": "^1.5.4",
+    "react": "^18.2.0",
+    "react-datepicker": "^9.1.0",
+    "react-dom": "^18.2.0",
+    "speakeasy": "^2.0.0",
+    "stripe": "^22.4.0",
+    "yookassa": "^0.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "@types/react": "^18.2.0",
+    "autoprefixer": "^10.4.19",
+    "baseline-browser-mapping": "^2.10.0",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.35",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.4.5"
+  },
+  "overrides": {
+    "baseline-browser-mapping": "^2.10.0"
+  },
+  "allowScripts": {
+    "unrs-resolver": true
+  }
+}

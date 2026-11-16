@@ -1,0 +1,150 @@
+// ==============================================================================
+// БЛОК ОТЗЫВОВ И РЕЙТИНГА В СТИЛЕ couture: REVIEWS SECTION
+// Файл: components/ReviewsSection.js
+// Назначение: Оценки по критериям и отзывы гостей из Google Sheets
+// ==============================================================================
+
+import React from 'react';
+import { Star, CheckCircle2 } from 'lucide-react';
+import { useLanguage } from '../utils/language';
+
+export default function ReviewsSection({ homeData = null, customReviewsData = null }) {
+  const { t, lang } = useLanguage();
+
+  const reviewsData = customReviewsData || homeData?.reviewsData;
+
+  const headerText = reviewsData?.header?.[lang] || reviewsData?.header?.ru || t('reviewsScoreHeaderFallback', '4.98 • Рейтинг гостей на основе 48 отзывов');
+
+  const defaultCategories = [
+    { key: 'reviewCleanliness', label: t('reviewCleanliness', 'Чистота'), score: '5.0', percent: 100 },
+    { key: 'reviewAccuracy', label: t('reviewAccuracy', 'Точность описания'), score: '4.9', percent: 98 },
+    { key: 'reviewCommunication', label: t('reviewCommunication', 'Общение с хозяином'), score: '5.0', percent: 100 },
+    { key: 'reviewLocation', label: t('reviewLocation', 'Расположение'), score: '4.9', percent: 98 },
+    { key: 'reviewCheckIn', label: t('reviewCheckIn', 'Прибытие и заезд'), score: '5.0', percent: 100 },
+    { key: 'reviewValue', label: t('reviewValue', 'Соотношение цена/качество'), score: '4.9', percent: 98 }
+  ];
+
+  // Карта соответствия категорий ключам словаря локализации
+  const catKeyMap = {
+    'review_cat_1': 'reviewCleanliness',
+    'review_cat_2': 'reviewAccuracy',
+    'review_cat_3': 'reviewCommunication',
+    'review_cat_4': 'reviewLocation',
+    'review_cat_5': 'reviewCheckIn',
+    'review_cat_6': 'reviewValue',
+    'Чистота': 'reviewCleanliness',
+    'Точность описания': 'reviewAccuracy',
+    'Общение с хозяином': 'reviewCommunication',
+    'Расположение': 'reviewLocation',
+    'Прибытие и заезд': 'reviewCheckIn',
+    'Соотношение цена/качество': 'reviewValue'
+  };
+
+  const categories = (reviewsData?.categories && reviewsData.categories.length > 0)
+    ? reviewsData.categories.map((c, idx) => {
+        const transKey = catKeyMap[c.key] || catKeyMap[c.label?.ru] || catKeyMap[c.label] || defaultCategories[idx]?.key;
+        const localizedLabel = (transKey && t(transKey)) || c.label?.[lang] || c.label?.ru || (typeof c.label === 'string' ? c.label : '');
+        return {
+          label: localizedLabel,
+          score: c.score || '5.0',
+          percent: c.percent || 100
+        };
+      })
+    : defaultCategories;
+
+  const defaultReviews = [
+    {
+      author: 'Елена Смирнова • Август 2026',
+      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120',
+      comment: 'Потрясающая вилла! Вид на горы просто захватывает дух, бассейн чистейший. Василиса был на связи 24/7, помог организовать незабываемый круиз на яхте по озеру Кёйджегиз. Обязательно вернемся!'
+    },
+    {
+      author: 'Markus Webber • Июль 2026',
+      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120',
+      comment: 'Outstanding hospitality and pristine villa. Fast Wi-Fi for remote work, peaceful neighborhood, and fully equipped kitchen. Vasilisa is truly a top Superhost!'
+    },
+    {
+      author: 'Ahmet Yilmaz • Июнь 2026',
+      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120',
+      comment: 'Dalyan\'da kaldigimiz en konforlu villa. Bahce ve havuz bakimi mukemmeldi. Ailemizle birlikte cok huzurlu bir hafta gecirdik, tesekkurler Vasilisa!'
+    },
+    {
+      author: 'Дмитрий и Анна • Май 2026',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120',
+      comment: 'Идеально для семейного отдыха с детьми. Закрытая территория, просторные спальни, тишина. Видео-гид от Василисы открыл нам секретные пляжи Дальяна, где нет толп туристов.'
+    }
+  ];
+
+  const reviews = (reviewsData?.reviews && reviewsData.reviews.length > 0)
+    ? reviewsData.reviews.map((r) => ({
+        author: r.author?.[lang] || r.author?.ru || (typeof r.author === 'string' ? r.author : ''),
+        avatar: r.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120',
+        comment: r.comment?.[lang] || r.comment?.ru || (typeof r.comment === 'string' ? r.comment : '')
+      }))
+    : defaultReviews;
+
+  const verifiedLabel = t('verifiedBooking') || 'Подтвержденное бронирование';
+
+  return (
+    <div id="reviews" className="py-10 border-t border-white/10">
+      
+      {/* Общий заголовок рейтинга */}
+      <div className="flex items-center gap-3 mb-8">
+        <Star className="w-8 h-8 text-rose-500 fill-rose-500" />
+        <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+          {headerText}
+        </h2>
+      </div>
+
+      {/* Оценки по критериям */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-3 mb-10">
+        {categories.map((cat, idx) => (
+          <div key={idx} className="flex items-center justify-between gap-4 text-xs sm:text-sm">
+            <span className="text-slate-300 font-medium">{cat.label}</span>
+            <div className="flex items-center gap-3">
+              <div className="w-24 sm:w-32 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-rose-500 rounded-full"
+                  style={{ width: `${cat.percent}%` }}
+                />
+              </div>
+              <span className="font-bold text-white w-6 text-right">{cat.score}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Сетка отзывов */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {reviews.map((rev, idx) => (
+          <div
+            key={idx}
+            className="bg-slate-800/50 border border-white/5 rounded-2xl p-5 flex flex-col justify-between"
+          >
+            <div>
+              <div className="flex items-center gap-3 mb-3">
+                <img
+                  src={rev.avatar}
+                  alt={rev.author}
+                  className="w-11 h-11 rounded-full object-cover border border-white/10"
+                />
+                <div>
+                  <h4 className="text-sm font-bold text-white">{rev.author}</h4>
+                </div>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                "{rev.comment}"
+              </p>
+            </div>
+            <div className="mt-4 flex items-center gap-1 text-emerald-400 text-[11px] font-semibold">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>{verifiedLabel}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+    </div>
+  );
+}
+

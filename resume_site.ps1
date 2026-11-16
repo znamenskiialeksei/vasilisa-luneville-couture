@@ -1,0 +1,120 @@
+﻿﻿# ===============================================================================
+# VASILISA.LUNEVILLE couture PLATFORM: ВОЗОБНОВЛЕНИЕ РАБОТЫ САЙТА - VERCEL RESUME
+# ===============================================================================
+# Файл:           resume_site.ps1
+# Редакция:       16.11.2026 00:55 | ПЛАН: 161120260055 ПЛАН Фикс vercel_json в pause_site.md
+# Тег:            [TAG: VILLA-VERCEL-RESUME-CLEANUP-161120260055]
+# Кодировка:      UTF-8 с BOM [\uFEFF] - нативный стандарт VS Code и PowerShell 7
+# Целевая ветка:  v1-couture
+# ===============================================================================
+
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+$TargetBranch = "v1-couture"
+$ProjectTitle = "Vasilisa.luneville - вышивка от кутюр Haute Couture Platform"
+
+if ($PSScriptRoot) {
+    $ProjectRoot = $PSScriptRoot
+} elseif ($env:SCRIPT_FILE) {
+    $ProjectRoot = Split-Path -Parent $env:SCRIPT_FILE
+} else {
+    $ProjectRoot = (Get-Location).Path
+}
+
+Set-Location -LiteralPath $ProjectRoot
+
+Write-Host "===============================================================================" -ForegroundColor Cyan
+Write-Host "  ДЕАКТИВАЦИЯ РЕЖИМА ОБСЛУЖИВАНИЯ - ВОЗВРАТ В СТРОЙ [VERCEL RESUME]" -ForegroundColor Yellow
+Write-Host "===============================================================================" -ForegroundColor Cyan
+Write-Host "  Проект:         $ProjectTitle" -ForegroundColor DarkGray
+Write-Host "  Каталог:        $ProjectRoot" -ForegroundColor DarkGray
+Write-Host "  Целевая ветка:  $TargetBranch" -ForegroundColor DarkGray
+Write-Host ""
+
+# 1. Удаление всех файлов заглушки, Edge Middleware и конфигурации обслуживания
+Write-Host "[1/3] Удаление middleware.js, maintenance.html, public/maintenance.html и vercel.json..." -ForegroundColor Cyan
+
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$NpmrcPath = Join-Path $ProjectRoot ".npmrc"
+$NpmrcContent = "loglevel=error`nfund=false`naudit=false`n"
+[System.IO.File]::WriteAllText($NpmrcPath, $NpmrcContent, $Utf8NoBom)
+
+$FilesToClean = @(
+    (Join-Path $ProjectRoot "middleware.js"),
+    (Join-Path $ProjectRoot "vercel.json"),
+    (Join-Path $ProjectRoot "maintenance.html"),
+    (Join-Path $ProjectRoot "public\maintenance.html"),
+    (Join-Path $ProjectRoot "index.html")
+)
+
+$filesRemoved = $false
+foreach ($targetFile in $FilesToClean) {
+    if (Test-Path -LiteralPath $targetFile) {
+        Remove-Item -LiteralPath $targetFile -Force -ErrorAction SilentlyContinue
+        $leafName = Split-Path -Leaf $targetFile
+        Write-Host "  [OK] Удален файл режима обслуживания: $leafName" -ForegroundColor Green
+        $filesRemoved = $true
+    }
+}
+
+if (-not $filesRemoved) {
+    Write-Host "  [ИНФО] Файлы режима обслуживания уже отсутствовали на диске." -ForegroundColor Yellow
+}
+
+# 2. Фиксация в Git и отправка в ветку v1-couture
+Write-Host "[2/3] Фиксация изменений в Git и отправка коммита..." -ForegroundColor Cyan
+try {
+    $WorkspaceRoot = $ProjectRoot
+    while (-not [string]::IsNullOrWhiteSpace($WorkspaceRoot) -and -not (Test-Path -LiteralPath (Join-Path $WorkspaceRoot ".git"))) {
+        $parent = Split-Path -Parent $WorkspaceRoot
+        if ([string]::IsNullOrWhiteSpace($parent) -or ($parent -eq $WorkspaceRoot)) {
+            $WorkspaceRoot = $null
+            break
+        }
+        $WorkspaceRoot = $parent
+    }
+    if ([string]::IsNullOrWhiteSpace($WorkspaceRoot) -or -not (Test-Path -LiteralPath (Join-Path $WorkspaceRoot ".git"))) {
+        $WorkspaceRoot = Split-Path -Parent $ProjectRoot
+    }
+
+    $ProjectFolder = Split-Path -Leaf $ProjectRoot
+    Set-Location -LiteralPath $WorkspaceRoot
+
+    git rm -f --ignore-unmatch "$ProjectFolder/middleware.js" "$ProjectFolder/vercel.json" "$ProjectFolder/maintenance.html" "$ProjectFolder/public/maintenance.html" "$ProjectFolder/index.html" 2>$null | Out-Null
+    git add -A 2>$null
+    $gitStatus = git status --porcelain 2>$null
+    if ($gitStatus) {
+        git commit -m "chore: деактивация режима обслуживания и возврат в строй - $TargetBranch" 2>$null
+        Write-Host "  [ИНФО] Коммит отключения техобслуживания сформирован." -ForegroundColor Yellow
+
+        Write-Host "  [ИНФО] Формирование изолированного коммита проекта через git subtree split..." -ForegroundColor Cyan
+        $subCommit = git subtree split --prefix=$ProjectFolder 2>$null
+        if ($subCommit) {
+            $subCommit = $subCommit.Trim()
+            Write-Host "  [ИНФО] Отправка изолированного дерева в ветку $TargetBranch на GitHub..." -ForegroundColor Cyan
+            git push origin "${subCommit}:refs/heads/${TargetBranch}" --force 2>$null
+        } else {
+            Write-Host "  [ИНФО] Прямая отправка через git subtree push..." -ForegroundColor Cyan
+            git subtree push --prefix=$ProjectFolder origin $TargetBranch 2>$null
+        }
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  [OK] Ветка $TargetBranch обновлена. Vercel инициировал пересборку боевого сайта." -ForegroundColor Green
+        } else {
+            Write-Host "  [ИНФО] Локальные файлы удалены и коммит создан. Отправка на remote отложена [проверьте сеть или права Git]." -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "  [OK] Git репозиторий находится в актуальном чистом состоянии." -ForegroundColor Green
+    }
+} catch {
+    Write-Host "  [ИНФО] Завершено локальное удаление файлов обслуживания." -ForegroundColor Yellow
+} finally {
+    Set-Location -LiteralPath $ProjectRoot
+}
+
+# 3. Финал
+Write-Host ""
+Write-Host "===============================================================================" -ForegroundColor Green
+Write-Host "  УСПЕХ! Режим обслуживания деактивирован. Платформа возвращена в строй." -ForegroundColor Green
+Write-Host "===============================================================================" -ForegroundColor Green
